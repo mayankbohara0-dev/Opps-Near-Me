@@ -79,19 +79,8 @@ function SubmitForm() {
       });
       const data = await res.json();
       
-      const newItem = {
-         ...form,
-         id: undefined, // Supabase auto-generates UUID
-         status: data.valid ? "active" : "rejected",
-         created_at: new Date().toISOString(),
-         updated_at: new Date().toISOString()
-      };
-      
       if (data.valid) {
-         // Insert to db if valid
-         const { error } = await supabase.from("opportunities").insert([newItem]);
-         if (error) console.error("DB Insert Failed:", error);
-         setOpportunities(prev => [{...newItem, id: "temp_" + Date.now()} as any, ...prev]);
+         setOpportunities(prev => [data.item, ...prev]);
          setSubmitted(true);
       } else {
          setRejectReason(data.reason || "We detected low-quality information in this post. Please fix it.");

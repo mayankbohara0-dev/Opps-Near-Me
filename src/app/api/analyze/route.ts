@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { supabaseAdmin as supabase } from "@/lib/supabase-server";
 
 const rateLimitMap = new Map<string, { count: number, resetTime: number }>();
 
@@ -58,7 +59,21 @@ export async function POST(req: Request) {
     if (text.startsWith("\`\`\`json")) text = text.replace(/\`\`\`json/g, "").replace(/\`\`\`/g, "").trim();
 
     const analysis = JSON.parse(text);
-    return NextResponse.json(analysis);
+    let insertedItem = null;
+    
+    if (analysis.valid) {
+      const newItem = {
+        ...item,
+        status: "active",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      const { data, error } = await supabase.from("opportunities").insert([newItem]).select().single();
+      if (error) throw error;
+      insertedItem = data;
+    }
+
+    return NextResponse.json({ ...analysis, item: insertedItem });
 
   } catch (error: any) {
     console.error("Analysis generation error:", error);

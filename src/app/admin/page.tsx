@@ -108,19 +108,19 @@ function AdminDashboard() {
       const approved = allOpportunities.find(o => o.id === id);
       return approved ? [{...approved, status:"active"} as any, ...d] : d;
     });
-    await supabase.from("opportunities").update({ status: "active", updated_at: new Date().toISOString() }).eq("id", id);
+    await fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "approve", id }) });
   };
   
   const reject = async (id:string) => {
     setAllOpportunities(d => d.map(o => o.id===id ? {...o,status:"rejected"} as any : o));
     setOpportunities(d => d.filter(o => o.id !== id)); // remove from public feed
-    await supabase.from("opportunities").update({ status: "rejected", updated_at: new Date().toISOString() }).eq("id", id);
+    await fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reject", id }) });
   };
   
   const remove = async (id:string) => {
     setAllOpportunities(d => d.filter(o => o.id!==id));
     setOpportunities(d => d.filter(o => o.id!==id));
-    await supabase.from("opportunities").delete().eq("id", id);
+    await fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", id }) });
   };
 
   const rows = opportunities.filter(o => {

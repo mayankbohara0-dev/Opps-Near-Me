@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin as supabase } from "@/lib/supabase-server";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function GET(req: Request) {
   try {
+    const resend = new Resend(process.env.RESEND_API_KEY || "dummy");
     // Verify Vercel Cron Security
     const authHeader = req.headers.get("authorization");
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
