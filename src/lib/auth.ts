@@ -2,9 +2,8 @@
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { signToken, verifyToken as verifyJwt } from "@/lib/jwt";
+import { supabaseAdmin } from "@/lib/supabase-server";
 import { sendVerificationEmail } from "@/lib/mail";
-import fs from "fs";
-import path from "path";
 
 // ─── Auth Types ───────────────────────────────────────────────────────────────
 export interface User {
@@ -14,13 +13,12 @@ export interface User {
   role: "admin" | "user";
   createdAt: string;
   verified?: boolean;
-  verifyToken?: string;
 }
 
 export type AuthError = { field?: string; message: string };
 
 // ─── Admin Credentials ───────────────────────────────────────────
-const ADMIN_EMAIL    = process.env.ADMIN_EMAIL || "admin@example.com";
+const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    || "admin@example.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 
 const ADMIN_USER: User = {
@@ -30,33 +28,6 @@ const ADMIN_USER: User = {
   role:      "admin",
   createdAt: "2026-01-01T00:00:00Z",
 };
-
-// ─── Ephemeral File DB ────────────────────────────────────────────────────────
-const dbPath = path.join(process.cwd(), ".app-users.json");
-
-function getStoredUsers(): Array<User & { password: string }> {
-  try {
-    if (fs.existsSync(dbPath)) {
-      return JSON.parse(fs.readFileSync(dbPath, "utf-8"));
-    }
-  } catch (e) {
-    console.error("Error reading users db:", e);
-  }
-  return [];
-}
-
-function saveStoredUsers(users: Array<User & { password: string }>) {
-  try {
-    fs.writeFileSync(dbPath, JSON.stringify(users));
-  } catch (e) {
-    console.error("Error writing users db:", e);
-  }
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function genId() {
-  return "user-" + Math.random().toString(36).slice(2, 10);
-}
 
 // ─── Session Management ───────────────────────────────────────────────────────
 export async function getSessionUser(): Promise<User | null> {
@@ -69,46 +40,61 @@ export async function getSessionUser(): Promise<User | null> {
   return decoded.user as User;
 }
 
+// ─── Login ────────────────────────────────────────────────────────────────────
 export async function loginAction(email: string, password: string): Promise<{ user: User } | { error: AuthError }> {
   const e = email.trim().toLowerCase();
   const p = password.trim();
 
   let userToLogin: User | null = null;
 
-  // Check admin first
-  if (e === ADMIN_EMAIL && p === ADMIN_PASSWORD) {
+  // 1. Check if admin
+  if (e === ADMIN_EMAIL.toLowerCase() && p === ADMIN_PASSWORD) {
     userToLogin = ADMIN_USER;
   } else {
-    // Check registered users
-    const users = getStoredUsers();
-    const found  = users.find(u => u.email.toLowerCase() === e);
-    if (!found) return { error: { field: "email", message: "No account found with this email" } };
-    
-    if (found.verified === false) {
+    // 2. Look up user from Supabase
+    const { data: rows, error } = await supabaseAdmin
+      .from("app_users")
+      .select("*")
+      .eq("email", e)
+      .limit(1);
+
+    if (error || !rows || rows.length === 0) {
+      return { error: { field: "email", message: "No account found with this email" } };
+    }
+
+    const found = rows[0];
+
+    if (!found.verified) {
       return { error: { field: "general", message: "Please verify your email address. Check your inbox!" } };
     }
 
-    // SECURE BCRYPT VERIFICATION
     const isMatch = bcrypt.compareSync(p, found.password);
     if (!isMatch) return { error: { field: "password", message: "Incorrect password" } };
 
-    const { password: _pw, ...user } = found;
-    userToLogin = user;
+    userToLogin = {
+      id:        found.id,
+      name:      found.name,
+      email:     found.email,
+      role:      found.role,
+      createdAt: found.created_at,
+      verified:  found.verified,
+    };
   }
 
-  // Create JWT and Set Secure HttpOnly Cookie
+  // Create JWT and set secure HttpOnly cookie
   const token = await signToken({ user: userToLogin });
   (await cookies()).set("secure_auth_token", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     path: "/",
-    maxAge: 86400 * 7 // 1 week
+    maxAge: 86400 * 7, // 1 week
   });
 
   return { user: userToLogin };
 }
 
+// ─── Register ─────────────────────────────────────────────────────────────────
 export async function registerAction(
   name: string,
   email: string,
@@ -118,55 +104,70 @@ export async function registerAction(
   const n = name.trim();
   const p = password.trim();
 
-  if (!n)             return { error: { field: "name",     message: "Name is required" } };
-  if (!e)             return { error: { field: "email",    message: "Email is required" } };
-  if (!e.endsWith("@gmail.com")) return { error: { field: "email", message: "Only Google (@gmail.com) accounts are allowed to register." } };
-  if (p.length < 6)   return { error: { field: "password", message: "Password must be at least 6 characters" } };
-  if (e === ADMIN_EMAIL) return { error: { field: "email", message: "This email is already registered" } };
+  if (!n)                       return { error: { field: "name",     message: "Name is required" } };
+  if (!e)                       return { error: { field: "email",    message: "Email is required" } };
+  if (!e.endsWith("@gmail.com"))return { error: { field: "email",    message: "Only Google (@gmail.com) accounts are allowed to register." } };
+  if (p.length < 6)             return { error: { field: "password", message: "Password must be at least 6 characters" } };
+  if (e === ADMIN_EMAIL.toLowerCase()) return { error: { field: "email", message: "This email is already registered" } };
 
-  const users = getStoredUsers();
-  if (users.some(u => u.email.toLowerCase() === e)) {
+  // Check if user already exists in Supabase
+  const { data: existing } = await supabaseAdmin
+    .from("app_users")
+    .select("id")
+    .eq("email", e)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
     return { error: { field: "email", message: "An account with this email already exists" } };
   }
 
-  const tokenHex = Math.random().toString(36).substring(2) + Date.now().toString(36) + Math.random().toString(36).substring(2);
-
-  const newUser: User = {
-    id:        genId(),
-    name:      n,
-    email:     e,
-    role:      "user",
-    createdAt: new Date().toISOString(),
-    verified:  false,
-    verifyToken: tokenHex,
-  };
-
-  // SECURE BCRYPT HASHING
-  const salt = bcrypt.genSaltSync(10);
+  // Hash password securely
+  const salt           = bcrypt.genSaltSync(10);
   const hashedPassword = bcrypt.hashSync(p, salt);
 
-  users.push({ ...newUser, password: hashedPassword });
-  saveStoredUsers(users);
+  // Generate a verification token
+  const verifyToken = Math.random().toString(36).substring(2) + Date.now().toString(36) + Math.random().toString(36).substring(2);
 
-  // Trigger Email
-  await sendVerificationEmail(e, tokenHex);
+  // Insert into Supabase
+  const { error: insertError } = await supabaseAdmin.from("app_users").insert({
+    name:         n,
+    email:        e,
+    password:     hashedPassword,
+    role:         "user",
+    verified:     false,
+    verify_token: verifyToken,
+  });
+
+  if (insertError) {
+    console.error("Supabase insert error:", insertError);
+    return { error: { field: "general", message: "Registration failed. Please try again." } };
+  }
+
+  // Send verification email via nodemailer
+  await sendVerificationEmail(e, verifyToken);
 
   return { pendingVerification: true };
 }
 
+// ─── Logout ───────────────────────────────────────────────────────────────────
 export async function logoutAction() {
   (await cookies()).delete("secure_auth_token");
 }
 
+// ─── Email Verification ───────────────────────────────────────────────────────
 export async function verifyEmailAction(token: string): Promise<boolean> {
-  const users = getStoredUsers();
-  const userIndex = users.findIndex(u => u.verifyToken === token);
-  
-  if (userIndex === -1) return false;
-  
-  users[userIndex].verified = true;
-  users[userIndex].verifyToken = undefined;
-  
-  saveStoredUsers(users);
-  return true;
+  const { data, error } = await supabaseAdmin
+    .from("app_users")
+    .select("id")
+    .eq("verify_token", token)
+    .limit(1);
+
+  if (error || !data || data.length === 0) return false;
+
+  const { error: updateError } = await supabaseAdmin
+    .from("app_users")
+    .update({ verified: true, verify_token: null })
+    .eq("verify_token", token);
+
+  return !updateError;
 }

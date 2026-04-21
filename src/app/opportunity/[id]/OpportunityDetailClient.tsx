@@ -18,8 +18,8 @@ const CAT_ACCENT: Record<string, string> = {
 };
 
 export default function OpportunityDetailClient({ id }: { id: string }) {
-  const { opportunities } = useData();
-  const opp = opportunities.find(o => o.id === id);
+  const { opportunities, allOpportunities } = useData();
+  const opp = opportunities.find(o => o.id === id) || allOpportunities.find(o => o.id === id);
   const router  = useRouter();
   const [copied, setCopied] = useState(false);
   
@@ -48,7 +48,7 @@ export default function OpportunityDetailClient({ id }: { id: string }) {
       window.open(`https://wa.me/?text=${txt}`, "_blank");
     }
   };
-  const applyHref = opp?.external_link || `https://wa.me/${opp?.contact_phone?.replace(/\D/g,"") || ''}`;
+  const applyHref = ensureAbsoluteUrl(opp?.external_link) || `https://wa.me/${opp?.contact_phone?.replace(/\D/g,"") || ''}`;
   const related   = opportunities.filter(o => o.id !== opp?.id && o.category === opp?.category && o.status === "active").slice(0,3);
 
   const PILL_STYLE = {
@@ -211,7 +211,7 @@ export default function OpportunityDetailClient({ id }: { id: string }) {
                     <ContactRow icon={<Mail size={13} />}      label="Email"            value={opp.contact_email}  href={`mailto:${opp.contact_email}`} />
                   )}
                   {opp.external_link && (
-                    <ContactRow icon={<ExternalLink size={13} />} label="Website / Form" value="Open Link" href={opp.external_link} />
+                    <ContactRow icon={<ExternalLink size={13} />} label="Website / Form" value="Open Link" href={ensureAbsoluteUrl(opp.external_link)} />
                   )}
                 </div>
               </div>
@@ -288,6 +288,12 @@ export default function OpportunityDetailClient({ id }: { id: string }) {
 }
 
 /* ── Helpers ── */
+function ensureAbsoluteUrl(url?: string | null) {
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  return `https://${url}`;
+}
+
 function InfoSection({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
     <div className="card" style={{ padding: "22px 26px" }}>

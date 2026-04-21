@@ -20,6 +20,7 @@ export interface Opportunity {
   eligibility?: string;
   requirements?: string;
   what_offered?: string;
+  rejection_reason?: string;
 }
 
 export const TOP_INDIAN_CITIES = [

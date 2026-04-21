@@ -1,0 +1,11 @@
+feat: Complete Platform Overhaul & AI Automation V1.0
+
+- 🎨 Redesigned entire application with Anthropic/Parchment UI system
+- 🤖 Built robust Server-Side AI Scraper via Gemini API + Vercel Cron
+- 📅 Implemented strict date veto algorithms for expired events
+- 🛡️ Crowdsourcing features (Report Links + Automatic Penalties)
+- 📈 Nationwide scaling: Removed city restrictions for global search
+- 🖼️ Dynamic OpenGraph Image Engine for WhatsApp & Social sharing
+- 📧 Integrated Resend API for automated weekly newsletter digest
+
+Production ready for scale. 🚀

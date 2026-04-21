@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Send, CheckCircle, AlertCircle, Info, Zap } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { supabase } from "@/lib/supabase";
+import { TOP_INDIAN_CITIES } from "@/lib/data";
 
 const CATS = [
   { value: "sports",     label: "🏏 Sports Trials" },
@@ -209,7 +210,10 @@ function SubmitForm() {
                   <Field label="City *" error={errors.location_city}>
                     <select className="input" value={form.location_city} onChange={e => set("location_city", e.target.value)}>
                       <option value="">Select city…</option>
-                      {["Bhiwandi","Thane","Mumbai","Other"].map(c => <option key={c} value={c}>{c}</option>)}
+                      <option value="Remote">🌐 Remote / Online</option>
+                      <optgroup label="── All Cities ──">
+                        {TOP_INDIAN_CITIES.sort().map(c => <option key={c} value={c}>{c}</option>)}
+                      </optgroup>
                     </select>
                   </Field>
                   <Field label="Area / Locality *" error={errors.location_area}>
@@ -246,7 +250,7 @@ function SubmitForm() {
               <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
 
                 <Field label="Your Name / Organization *" error={errors.organizer_name}>
-                  <input type="text" className="input" placeholder="e.g. Bhiwandi Cricket Club"
+                  <input type="text" className="input" placeholder="e.g. Delhi Cricket Club"
                     value={form.organizer_name} onChange={e => set("organizer_name", e.target.value)} />
                 </Field>
 

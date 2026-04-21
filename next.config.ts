@@ -5,7 +5,7 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
-  { key: "Referrer-Policy", value: "no-referrer" }
+  { key: "Referrer-Policy", value: "no-referrer" },
 ];
 
 const nextConfig: NextConfig = {
@@ -24,11 +24,17 @@ const nextConfig: NextConfig = {
   compiler: {
     // Remove console.log in production (keep errors)
     removeConsole: process.env.NODE_ENV === "production"
-      ? { exclude: ["error"] }
+      ? { exclude: ["error", "warn"] }
       : false,
   },
 
-  // ── Webpack memory/performance tuning (only used when NOT on Turbopack) ───
+  // ── Image optimization ────────────────────────────────────────────────────
+  images: {
+    formats: ["image/avif", "image/webp"],
+    minimumCacheTTL: 86400, // cache optimized images for 24h
+  },
+
+  // ── Webpack memory/performance tuning (dev only) ──────────────────────────
   webpack: (config, { dev }) => {
     if (dev) {
       config.parallelism = 2;
@@ -36,18 +42,30 @@ const nextConfig: NextConfig = {
         ...config.watchOptions,
         poll: false,
         aggregateTimeout: 300,
-        ignored: ['**/node_modules/**', '**/.git/**', '**/.next/**', '**/.agent/**', '**/dist/**']
+        ignored: ["**/node_modules/**", "**/.git/**", "**/.next/**", "**/.agent/**", "**/dist/**"],
       };
     }
     return config;
   },
+  turbopack: {},
 
-  // ── Security headers on every route ──────────────────────────────────────
+  // ── Headers: security + aggressive caching of static assets ──────────────
   async headers() {
     return [
       {
+        // Static files: cache for 1 year
+        source: "/_next/static/(.*)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      {
+        // All other routes: security headers + short revalidation
         source: "/(.*)",
-        headers: securityHeaders,
+        headers: [
+          ...securityHeaders,
+          { key: "Cache-Control", value: "public, max-age=0, s-maxage=60, stale-while-revalidate=300" },
+        ],
       },
     ];
   },

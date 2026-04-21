@@ -18,6 +18,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw]     = useState(false);
   const [loading, setLoading]   = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
   const [errors, setErrors]     = useState<{ name?: string; email?: string; password?: string; general?: string }>({});
 
   // Already logged in → redirect home
@@ -46,8 +47,10 @@ export default function AuthPage() {
       const res = await registerAction(name, email, password);
       if ("error" in res) {
         setErrors({ [res.error.field ?? "general"]: res.error.message });
-      } else if ("pendingVerification" in res) {
-        setPendingVerification(true);
+      } else {
+        // Account created — switch to login tab with success message specifying verification is needed
+        setSuccessMsg("Account created successfully! Please check your email to verify your account before signing in.");
+        switchMode("login");
       }
     }
     setLoading(false);
@@ -61,27 +64,19 @@ export default function AuthPage() {
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#000000",
+      minHeight: "100vh", background: "#f5f4ed",
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
       padding: "24px",
       position: "relative", overflow: "hidden",
     }}>
-      {/* blue aurora */}
+      {/* Warm aurora wash */}
       <div style={{
-        position: "fixed", top: 0, left: "50%",
+        position: "fixed", top: -60, left: "50%",
         transform: "translateX(-50%)",
-        width: 800, height: 400,
-        background: "radial-gradient(ellipse at top, rgba(0,153,255,0.1) 0%, transparent 70%)",
+        width: 800, height: 500,
+        background: "radial-gradient(ellipse at top, rgba(201,100,66,0.06) 0%, transparent 65%)",
         pointerEvents: "none", zIndex: 0,
-      }} />
-
-      {/* grid bg */}
-      <div style={{
-        position: "fixed", inset: 0, zIndex: 0,
-        backgroundImage: "linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)",
-        backgroundSize: "48px 48px",
-        pointerEvents: "none",
       }} />
 
       {/* Logo / brand */}
@@ -92,15 +87,15 @@ export default function AuthPage() {
       }}>
         <div style={{
           width: 32, height: 32, borderRadius: 8,
-          background: "#0099ff",
+          background: "#c96442",
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          <span style={{ fontSize: 14, fontWeight: 800, color: "#fff", letterSpacing: "-1px" }}>Lo</span>
+          <span style={{ fontSize: 14, fontWeight: 800, color: "#faf9f5", letterSpacing: "-1px" }}>Lo</span>
         </div>
         <span style={{
           fontFamily: "'Inter', sans-serif",
           fontWeight: 700, fontSize: 18,
-          letterSpacing: "-0.5px", color: "#ffffff",
+          letterSpacing: "-0.5px", color: "#141413",
         }}>LocalOpps</span>
       </Link>
 
@@ -108,20 +103,20 @@ export default function AuthPage() {
       <div style={{
         position: "relative", zIndex: 1,
         width: "100%", maxWidth: 420,
-        background: "#090909",
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: "#faf9f5",
+        border: "1px solid #f0eee6",
         borderRadius: 20,
-        boxShadow: "rgba(0,153,255,0.15) 0px 0px 0px 1px, rgba(0,0,0,0.5) 0px 32px 80px",
+        boxShadow: "rgba(0,0,0,0.05) 0px 4px 24px",
         overflow: "hidden",
         animation: "fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) both",
       }}>
         {/* Top blue accent line */}
-        <div style={{ height: 2, background: "#0099ff", opacity: 0.7 }} />
+        <div style={{ height: 2, background: "#c96442", opacity: 0.8 }} />
 
         {/* Mode toggle tabs */}
         <div style={{
           display: "grid", gridTemplateColumns: "1fr 1fr",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          borderBottom: "1px solid #e8e6dc",
         }}>
           {(["login", "register"] as Mode[]).map(m => (
             <button key={m} onClick={() => switchMode(m)} style={{
@@ -129,9 +124,9 @@ export default function AuthPage() {
               fontFamily: "'Inter', sans-serif",
               cursor: "pointer", border: "none",
               letterSpacing: "-0.2px",
-              background: mode === m ? "rgba(0,153,255,0.05)" : "transparent",
-              borderBottom: mode === m ? "2px solid #0099ff" : "2px solid transparent",
-              color: mode === m ? "#ffffff" : "#a6a6a6",
+              background: mode === m ? "rgba(201,100,66,0.05)" : "transparent",
+              borderBottom: mode === m ? "2px solid #c96442" : "2px solid transparent",
+              color: mode === m ? "#141413" : "#87867f",
               transition: "all 0.2s",
               textTransform: "capitalize",
             }}>
@@ -141,64 +136,59 @@ export default function AuthPage() {
         </div>
 
         <div style={{ padding: "32px 32px 28px" }}>
-          {pendingVerification ? (
-            <div className="anim-in" style={{ textAlign: "center", padding: "20px 0" }}>
-              <div style={{
-                width: 64, height: 64, borderRadius: "50%", margin: "0 auto 24px",
-                background: "rgba(0,153,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center",
-                color: "#0099ff"
+          <>
+            {/* Header */}
+            <div style={{ marginBottom: 28 }}>
+              <h1 style={{
+                fontFamily: "'Lora', Georgia, serif", fontWeight: 500,
+                fontSize: "1.5rem", letterSpacing: "normal",
+                color: "#141413", marginBottom: 8,
               }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/><path d="m16 19 2 2 4-4"/></svg>
-              </div>
-              <h2 className="heading-2" style={{ marginBottom: 12 }}>Check your inbox</h2>
-              <p style={{ color: "#a6a6a6", fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>
-                We've sent a verification link to<br/> <strong style={{color:"white"}}>{email}</strong>.
+                {mode === "login" ? "Welcome back" : "Join LocalOpps"}
+              </h1>
+              <p style={{ fontSize: 13, color: "#5e5d59", lineHeight: 1.6 }}>
+                {mode === "login"
+                  ? "Sign in to browse opportunities near you."
+                  : "Create your free account to get started."}
               </p>
-              <button onClick={() => setPendingVerification(false)} className="btn btn-outline" style={{ width: "100%", justifyContent: "center" }}>
-                Return to Login
-              </button>
             </div>
-          ) : (
-            <>
-              {/* Header */}
-          <div style={{ marginBottom: 28 }}>
-            <h1 style={{
-              fontFamily: "'Inter', sans-serif", fontWeight: 700,
-              fontSize: "1.5rem", letterSpacing: "-1px",
-              color: "#ffffff", marginBottom: 8,
-            }}>
-              {mode === "login" ? "Welcome back" : "Join LocalOpps"}
-            </h1>
-            <p style={{ fontSize: 13, color: "#a6a6a6", lineHeight: 1.6 }}>
-              {mode === "login"
-                ? "Sign in to browse opportunities near you."
-                : "Create your free account to get started."}
-            </p>
-          </div>
 
-          {/* Location context badge */}
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            padding: "5px 12px", borderRadius: 999, marginBottom: 24,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            fontSize: 11, color: "#a6a6a6",
-          }}>
-            <MapPin size={10} style={{ color: "#0099ff" }} />
-            Bhiwandi · Thane · Mumbai
-          </div>
-
-          {/* General error banner */}
-          {errors.general && (
+            {/* Location context badge */}
             <div style={{
-              padding: "10px 14px", borderRadius: 8, marginBottom: 20,
-              background: "rgba(248,113,113,0.07)",
-              border: "1px solid rgba(248,113,113,0.2)",
-              fontSize: 13, color: "#f87171",
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "5px 12px", borderRadius: 999, marginBottom: 24,
+              background: "rgba(201,100,66,0.08)",
+              border: "1px solid rgba(201,100,66,0.2)",
+              fontSize: 11, color: "#c96442",
             }}>
-              {errors.general}
+              <MapPin size={10} style={{ color: "#c96442" }} />
+              Live · Across India 🇮🇳
             </div>
-          )}
+
+            {/* ✅ Success banner (shown after registration) */}
+            {successMsg && (
+              <div style={{
+                padding: "10px 14px", borderRadius: 8, marginBottom: 20,
+                background: "rgba(34,197,94,0.08)",
+                border: "1px solid rgba(34,197,94,0.25)",
+                fontSize: 13, color: "#4ade80",
+                display: "flex", alignItems: "center", gap: 8,
+              }}>
+                ✅ {successMsg}
+              </div>
+            )}
+
+            {/* General error banner */}
+            {errors.general && (
+              <div style={{
+                padding: "10px 14px", borderRadius: 8, marginBottom: 20,
+                background: "rgba(248,113,113,0.07)",
+                border: "1px solid rgba(248,113,113,0.2)",
+                fontSize: 13, color: "#f87171",
+              }}>
+                {errors.general}
+              </div>
+            )}
 
           <form onSubmit={submit} noValidate style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
@@ -247,14 +237,31 @@ export default function AuthPage() {
                     color: "#a6a6a6", display: "flex", padding: 2,
                     transition: "color 0.2s",
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
-                  onMouseLeave={e => (e.currentTarget.style.color = "#a6a6a6")}
+                  onMouseEnter={e => (e.currentTarget.style.color = "#141413")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "#87867f")}
                   tabIndex={-1}
                 >
                   {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </Field>
+
+            {mode === "login" && (
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -8 }}>
+                <Link
+                  href="/auth/forgot-password"
+                  style={{
+                    fontSize: 12,
+                    color: "#c96442",
+                    textDecoration: "none",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+                  onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            )}
 
             {/* Submit */}
             <button
@@ -265,14 +272,16 @@ export default function AuthPage() {
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                 width: "100%", padding: "13px",
                 borderRadius: 100,
-                background: loading ? "rgba(255,255,255,0.7)" : "#ffffff",
-                color: "#000000",
+                background: loading ? "rgba(201,100,66,0.7)" : "#c96442",
+                color: "#faf9f5",
                 fontFamily: "'Inter', sans-serif",
-                fontWeight: 600, fontSize: 14,
-                letterSpacing: "-0.2px",
+                fontWeight: 500, fontSize: 14,
                 border: "none", cursor: loading ? "wait" : "pointer",
-                transition: "all 0.2s",
+                boxShadow: "#c96442 0px 0px 0px 0px, rgba(201,100,66,0.3) 0px 0px 0px 1px",
+                transition: "opacity 0.2s, transform 0.2s",
               }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = "0.90"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "translateY(0)"; }}
             >
               {loading ? (
                 <>
@@ -294,49 +303,50 @@ export default function AuthPage() {
           </form>
 
           {/* Divider */}
-          <div style={{
-            display: "flex", alignItems: "center", gap: 12,
-            margin: "24px 0",
-          }}>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
-            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>
-              {mode === "login" ? "New here?" : "Already have an account?"}
-            </span>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
-          </div>
+            <>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 12,
+                margin: "24px 0",
+              }}>
+                <div style={{ flex: 1, height: 1, background: "#e8e6dc" }} />
+                <span style={{ fontSize: 11, color: "#87867f" }}>
+                  {mode === "login" ? "New here?" : "Already have an account?"}
+                </span>
+                <div style={{ flex: 1, height: 1, background: "#e8e6dc" }} />
+              </div>
 
-          <button
-            onClick={() => switchMode(mode === "login" ? "register" : "login")}
-            style={{
-              width: "100%", padding: "11px",
-              borderRadius: 100,
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.09)",
-              color: "#ffffff",
-              fontFamily: "'Inter', sans-serif",
-              fontWeight: 500, fontSize: 13,
-              letterSpacing: "-0.15px",
-              cursor: "pointer",
-              transition: "background 0.2s",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.09)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-          >
-            {mode === "login" ? "Create a new account" : "Sign in instead"}
-          </button>
+              <button
+                type="button"
+                onClick={() => switchMode(mode === "login" ? "register" : "login")}
+                style={{
+                  width: "100%", padding: "11px",
+                  borderRadius: 100,
+                  background: "#e8e6dc",
+                  border: "none",
+                  boxShadow: "#e8e6dc 0px 0px 0px 0px, #d1cfc5 0px 0px 0px 1px",
+                  color: "#4d4c48",
+                  fontFamily: "'Inter', sans-serif",
+                  fontWeight: 500, fontSize: 13,
+                  cursor: "pointer",
+                  transition: "opacity 0.2s",
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = "0.9"}
+                onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+              >
+                {mode === "login" ? "Create a new account" : "Sign in instead"}
+              </button>
+            </>
 
-        </div>
           </>
-        )}
         </div>
 
         {/* Bottom note */}
         <div style={{
           padding: "16px 32px",
-          borderTop: "1px solid rgba(255,255,255,0.05)",
+          borderTop: "1px solid #f0eee6",
           textAlign: "center",
         }}>
-          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", lineHeight: 1.6 }}>
+          <p style={{ fontSize: 11, color: "#87867f", lineHeight: 1.6 }}>
             Free forever · No spam · Students only
           </p>
         </div>
@@ -345,10 +355,10 @@ export default function AuthPage() {
       {/* Footer note */}
       <p style={{
         position: "relative", zIndex: 1,
-        marginTop: 32, fontSize: 12, color: "rgba(255,255,255,0.2)",
+        marginTop: 32, fontSize: 12, color: "#87867f",
         letterSpacing: "-0.05px",
       }}>
-        © 2026 LocalOpps · Bhiwandi, Thane &amp; Mumbai
+        © 2026 LocalOpps · Across India
       </p>
 
       <style>{`
@@ -369,10 +379,10 @@ function inputStyle(hasError: boolean): React.CSSProperties {
   return {
     width: "100%",
     padding: "11px 14px",
-    background: "rgba(255,255,255,0.04)",
-    border: `1px solid ${hasError ? "rgba(248,113,113,0.5)" : "rgba(255,255,255,0.1)"}`,
+    background: "#ffffff",
+    border: `1px solid ${hasError ? "rgba(248,113,113,0.5)" : "#e8e6dc"}`,
     borderRadius: 10,
-    color: "#ffffff",
+    color: "#141413",
     fontFamily: "'Inter', sans-serif",
     fontSize: 14,
     outline: "none",
@@ -386,7 +396,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <label style={{
         fontSize: 12, fontWeight: 500,
-        color: "#a6a6a6", letterSpacing: "-0.05px",
+        color: "#5e5d59", letterSpacing: "-0.05px",
       }}>{label}</label>
       <div style={{ position: "relative" }}>{children}</div>
       {error && (

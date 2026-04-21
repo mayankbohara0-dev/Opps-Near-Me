@@ -1,0 +1,19 @@
+{
+  "name": "LocalOpps — Student Opportunities",
+  "short_name": "LocalOpps",
+  "description": "Discover local sports trials, internships, hackathons, and student events across India.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#0099ff",
+  "orientation": "portrait",
+  "categories": ["education", "lifestyle"],
+  "lang": "en-IN",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "32x32",
+      "type": "image/x-icon"
+    }
+  ]
+}

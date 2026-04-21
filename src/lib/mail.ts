@@ -1,13 +1,5 @@
 import nodemailer from "nodemailer";
 
-export const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_APP_PASSWORD,
-  },
-});
-
 export async function sendVerificationEmail(toEmail: string, token: string) {
   const verificationLink = `http://localhost:3000/api/auth/verify?token=${token}`;
   
@@ -25,10 +17,25 @@ export async function sendVerificationEmail(toEmail: string, token: string) {
     `,
   };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Verification email sent to ${toEmail}`);
-  } catch (error) {
-    console.error("Failed to send verification email:", error);
+  if (process.env.SMTP_USER && process.env.SMTP_APP_PASSWORD) {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_APP_PASSWORD,
+      },
+    });
+    
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log(`Verification email sent to ${toEmail}`);
+    } catch (error) {
+      console.error("Failed to send verification email:", error);
+    }
+  } else {
+    console.log("\\n=============================================");
+    console.log(`[MAILER MOCK] Verification email request for: ${toEmail}`);
+    console.log(`[MAILER MOCK] Verify URL: ${verificationLink}`);
+    console.log("=============================================\\n");
   }
 }

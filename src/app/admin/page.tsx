@@ -43,7 +43,7 @@ function AdminDashboard() {
 
   const runAiScraper = async () => {
     setIsScraping(true);
-    setScrapeMessage("Querying Gemini via Google Search...");
+    setScrapeMessage("Calling AI... (this may take up to 30s, please wait)");
     
     try {
       const existingTitles = opportunities.map(o => o.title);
@@ -62,10 +62,11 @@ function AdminDashboard() {
 
       const scrapedItems = json.items || [];
       const dbItems = scrapedItems.map((item: any) => {
-        const { auto_approve, ...rest } = item;
+        const { auto_approve, rejection_reason, ...rest } = item;
         return {
           ...rest,
           status: auto_approve === true ? "active" : "rejected",
+          rejection_reason: auto_approve === true ? null : (rejection_reason || "Flagged by AI quality check"),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -82,7 +83,7 @@ function AdminDashboard() {
       // If DB fails, fallback to local display items so user still gets value
       const itemsToUse = insertedData && insertedData.length > 0 
         ? insertedData 
-        : dbItems.map((item, i) => ({ ...item, id: "ai_" + Date.now() + "_" + i }));
+        : dbItems.map((item: Record<string, unknown>, i: number) => ({ ...item, id: "ai_" + Date.now() + "_" + i }));
 
       // Update both admin and public lists
       setAllOpportunities(prev => [...itemsToUse as any, ...prev]);
@@ -203,7 +204,7 @@ function AdminDashboard() {
                 }}
               >
                 <div style={{ fontWeight:700, fontSize:30, color: isActive ? col.color : "#ffffff", lineHeight:1, letterSpacing:"-1.5px" }}>
-                  {counts[s]}
+                  {counts[s as keyof typeof counts]}
                 </div>
                 <div style={{ fontSize:11, color:"#a6a6a6", marginTop:8, fontWeight:500, textTransform:"capitalize", letterSpacing:"0.02em" }}>
                   {col.label}
@@ -280,6 +281,12 @@ function AdminDashboard() {
                         <div style={{ fontSize:11, color:"#a6a6a6", marginTop:3 }}>
                           {opp.organizer_name} · {opp.contact_email}
                         </div>
+                        {opp.status === "rejected" && opp.rejection_reason && (
+                          <div style={{ fontSize: 10, color: "#f87171", marginTop: 6, display: "flex", gap: 6, alignItems: "flex-start", lineHeight: 1.4, whiteSpace: "normal" }}>
+                            <span style={{flexShrink:0, display:"inline-block", transform:"rotate(-90deg)"}}>⮑</span> 
+                            <span><strong style={{fontWeight:600}}>AI Rejection Reason:</strong> {opp.rejection_reason}</span>
+                          </div>
+                        )}
                       </td>
 
                       {/* category */}

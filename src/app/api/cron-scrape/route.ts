@@ -1,19 +1,14 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { cookies } from "next/headers";
-import { verifyToken } from "@/lib/jwt";
 import { supabaseAdmin as supabase } from "@/lib/supabase-server";
 import google from "googlethis";
 
-// Increase Vercel serverless function timeout to 60 seconds
-export const maxDuration = 60;
-
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+export const maxDuration = 60; // Increase Vercel serverless function timeout to 60 seconds
 
 // Sleep helper
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Call Gemini with exponential backoff retries. Tries gemini-flash-latest then gemini-2.5-flash.
+// Call Gemini with exponential backoff retries.
 async function callGeminiWithRetry(apiKey: string, prompt: string): Promise<string> {
   const models = ["gemini-flash-latest", "gemini-2.5-flash"];
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -27,47 +22,27 @@ async function callGeminiWithRetry(apiKey: string, prompt: string): Promise<stri
         return result.response.text();
       } catch (err: any) {
         const isRetryable = err.status === 503 || err.status === 429;
-        console.warn(`[SCRAPER] ${modelName} attempt ${attempt} failed (${err.status}): ${err.message}`);
+        console.warn(`[CRON] ${modelName} attempt ${attempt} failed (${err.status}): ${err.message}`);
         if (isRetryable && attempt < 3) {
-          console.warn(`[SCRAPER] Retrying ${modelName} in ${delay / 1000}s...`);
+          console.warn(`[CRON] Retrying ${modelName} in ${delay / 1000}s...`);
           await sleep(delay);
-          delay *= 2; // exponential backoff
+          delay *= 2;
         } else if (!isRetryable) {
-          // Not a retryable error (e.g. 404, 403) — skip this model entirely
-          console.warn(`[SCRAPER] ${modelName} not usable (${err.status}), trying next model.`);
+          console.warn(`[CRON] ${modelName} not usable (${err.status}), trying next model.`);
           break;
         }
       }
     }
   }
-
-  throw new Error("All Gemini models failed after retries. The AI service is temporarily unavailable. Please try again in a few minutes.");
+  throw new Error("All Gemini models failed after retries.");
 }
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   try {
-    // Rate limiting
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
-    const now = Date.now();
-    const rateData = rateLimitMap.get(ip) || { count: 0, resetTime: now + 60000 };
-    if (now > rateData.resetTime) {
-      rateData.count = 0;
-      rateData.resetTime = now + 60000;
-    }
-    if (rateData.count >= 5) {
-      return NextResponse.json({ error: "Rate limit exceeded. Try again in a minute." }, { status: 429 });
-    }
-    rateData.count += 1;
-    rateLimitMap.set(ip, rateData);
-
-    // Auth check
-    const cookieStore = await cookies();
-    const token = cookieStore.get("secure_auth_token")?.value;
-    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-
-    const decoded = await verifyToken(token);
-    if (!decoded || !decoded.user || (decoded.user as any).role !== "admin") {
-      return NextResponse.json({ error: "Forbidden: Admins only" }, { status: 403 });
+    // 1. Verify Vercel Cron Security
+    const authHeader = req.headers.get("authorization");
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -75,51 +50,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Gemini API key not configured." }, { status: 500 });
     }
 
-    // Get existing titles to avoid duplicates
-    let existingTitles: string[] = [];
-    try {
-      const body = await req.json();
-      existingTitles = body.existingTitles || [];
-    } catch (e) {}
+    // 2. Fetch existing titles from DB to avoid duplicates
+    const { data: existingData } = await supabase.from("opportunities").select("title").order("created_at", { ascending: false }).limit(50);
+    const existingTitles = existingData ? existingData.map((o: any) => o.title) : [];
 
     const exclusions =
       existingTitles.length > 0
         ? `\nEXCLUSION RULE: Do NOT return any of these already-found opportunities: [${existingTitles
-            .slice(0, 20) // limit to avoid token bloat
-            .map((t) => `"${t}"`)
+            .slice(0, 20)
+            .map((t: string) => `"${t}"`)
             .join(", ")}]`
         : "";
 
-    // Inject today's date so AI knows what "future" means
-    const todayStr = new Date().toISOString().split("T")[0]; // e.g. "2026-04-14"
+    const todayStr = new Date().toISOString().split("T")[0];
+    const currentYear = new Date().getFullYear();
 
-    // Fetch real live internet data to ground the AI
+    // 3. Web Context
     let webContext = "";
     try {
       const queries = [
-        `site:unstop.com/hackathons india student registration ${new Date().getFullYear()}`,
-        `site:internshala.com/internships india student ${new Date().getFullYear()}`, 
-        `site:linkedin.com/jobs/view/ student internship india OR entry-level ${new Date().getFullYear()}`
+        `site:unstop.com/hackathons india student registration ${currentYear}`,
+        `site:internshala.com/internships india student ${currentYear}`, 
+        `site:linkedin.com/jobs/view/ student internship india OR entry-level ${currentYear}`
       ];
-      // Check different sources randomly to ensure variety across scrape runs
       const randomQuery = queries[Math.floor(Math.random() * queries.length)];
-      console.log("[SCRAPER] Searching for real opportunities with query:", randomQuery);
+      console.log("[CRON] Searching for real opportunities with query:", randomQuery);
       
-      const searchRes = await google.search(randomQuery, {
-        page: 0,
-        safe: false,
-        parse_ads: false
-      });
+      const searchRes = await google.search(randomQuery, { page: 0, safe: false, parse_ads: false });
       const topResults = searchRes.results.slice(0, 8).map((r: any) => `- Title: ${r.title}\n  Description: ${r.description}\n  Link: ${r.url}`).join("\n\n");
       
       if (topResults) {
         webContext = `\nREAL LIVE WEB SEARCH RESULTS:\nHere are real opportunities recently indexed on the web. You MUST prioritize extracting your 10 opportunities from these real results whenever possible so that the links and titles are 100% genuine and not hallucinated. Use the Exact Link provided in these results.\n\n${topResults}\n`;
       }
     } catch (err: any) {
-      console.warn("[SCRAPER] Web search failed, falling back to pure generative.", err.message);
+      console.warn("[CRON] Web search failed, falling back to pure generative.", err.message);
     }
 
-    // Lean, token-efficient prompt with proper quality assessment
+    // 4. Prompt
     const prompt = `You are a quality-control data generator for a student opportunity platform in India.
 Today's date is ${todayStr}.
 ${exclusions}${webContext}
@@ -132,7 +99,7 @@ DATE RULES (CRITICAL — strictly enforce):
 - "deadline" MUST be a future date STRICTLY AFTER ${todayStr}. Minimum deadline: at least 7 days from today.
 - "event_date" MUST also be on or after today (${todayStr}). Never use past dates.
 - Do NOT generate any opportunity whose event or deadline has already passed. Ensure dates match any data found in the real web search results.
-- If the search results mention a year in the past (e.g. 2023, 2024, 2025), DO NOT invent a future 2026 deadline for it. You MUST set auto_approve to FALSE and state that it is an old event.
+- If the search results mention a year in the past (e.g. 2023, 2024, 2025), DO NOT invent a future ${currentYear} deadline for it. You MUST set auto_approve to FALSE and state that it is an old event.
 
 QUALITY CHECK (mandatory for every item):
 - The 'external_link' rule is STRICT. You MUST ONLY provide real, valid, direct URLs to the registration or opportunity page. Ensure the link points to the true origin of the opportunity (like unstop.com, internshala.com, etc.). Provide an empty string "" if you do not have a valid exact URL. Do NOT hallucinate fake links and do NOT use a Google search format.
@@ -161,27 +128,21 @@ Each item MUST have these exact fields:
   "rejection_reason": "empty string if auto_approve is true, else specific reason"
 }`;
 
-    // Call Gemini with retry + fallback
     const rawText = await callGeminiWithRetry(apiKey, prompt);
-    console.log("[SCRAPER] Raw response length:", rawText.length);
-
-    // Extract JSON array robustly
     const startIndex = rawText.indexOf("[");
     const endIndex = rawText.lastIndexOf("]");
-
+    
     if (startIndex === -1 || endIndex === -1) {
-      console.error("[SCRAPER] No JSON array found in response:", rawText);
-      throw new Error("AI returned an unexpected format. Please try again.");
+      throw new Error("AI returned an unexpected format.");
     }
 
     const parsedItems = JSON.parse(rawText.substring(startIndex, endIndex + 1));
 
-    // ── Hard server-side filter: Mark expired items as auto_approve=false instead of dropping them ──
+    // 5. Server-Side Filter & Formatting for DB
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // compare date only, ignore time
+    today.setHours(0, 0, 0, 0);
     
-    const items = parsedItems.map((item: any) => {
-      // Create a safety net incase AI forces auto_approve on expired
+    const dbItems = parsedItems.map((item: any) => {
       let isExpired = false;
       let expiredReason = "";
 
@@ -207,22 +168,35 @@ Each item MUST have these exact fields:
       }
 
       if (isExpired) {
-        console.warn(`[SCRAPER] Flagged outdated item: "${item.title}"`);
         item.auto_approve = false;
         item.rejection_reason = item.rejection_reason && item.rejection_reason !== "" 
           ? item.rejection_reason 
           : expiredReason;
       }
-      return item;
+
+      // Format for Supabase Insertion (just like the Admin page does)
+      const { auto_approve, rejection_reason, ...rest } = item;
+      return {
+        ...rest,
+        status: auto_approve === true ? "active" : "rejected",
+        rejection_reason: auto_approve === true ? null : (item.rejection_reason || "Flagged by AI quality check"),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
     });
 
-    console.log(`[SCRAPER] ${items.length}/${parsedItems.length} items passed the date filter.`);
-    return NextResponse.json({ items });
+    // 6. Insert into Supabase
+    const { error } = await supabase.from("opportunities").insert(dbItems);
+    if (error) {
+      console.error("[CRON] Supabase insert error:", error);
+      throw error;
+    }
+
+    console.log(`[CRON] Successfully inserted ${dbItems.length} items to database.`);
+    return NextResponse.json({ success: true, count: dbItems.length });
+    
   } catch (error: any) {
-    console.error("[SCRAPER] Fatal error:", error.message || error);
-    return NextResponse.json(
-      { error: error.message || "Internal Server Error - failed to process request." },
-      { status: 500 }
-    );
+    console.error("[CRON] Fatal error:", error.message || error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }

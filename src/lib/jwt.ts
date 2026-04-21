@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 
 const SECRET_KEY = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback_default_insecure_secret_for_local_dev_only_" + Math.random()
+  process.env.JWT_SECRET || "fallback_default_insecure_secret_for_local_dev_only_static"
 );
 
 export async function signToken(payload: any) {
