@@ -229,7 +229,25 @@ Each item MUST have these exact fields:
     });
 
     console.log(`[SCRAPER] ${items.length}/${parsedItems.length} items passed the date filter.`);
-    return NextResponse.json({ items });
+
+    // Securely insert into database on the server-side (bypasses RLS)
+    const dbItems = items.map((item: any) => {
+      const { auto_approve, rejection_reason, ...rest } = item;
+      return {
+        ...rest,
+        status: auto_approve === true ? "active" : "rejected",
+        rejection_reason: auto_approve === true ? null : (rejection_reason || "Flagged by AI quality check"),
+      };
+    });
+
+    const { data: insertedData, error: dbError } = await supabase.from("opportunities").insert(dbItems).select();
+
+    if (dbError) {
+      console.error("[SCRAPER] DB Insert Error:", dbError);
+      return NextResponse.json({ error: "Data scraped, but failed to save to Database." }, { status: 500 });
+    }
+
+    return NextResponse.json({ items: insertedData || [] });
   } catch (error: any) {
     console.error("[SCRAPER] Fatal error:", error.message || error);
     return NextResponse.json(

@@ -61,34 +61,11 @@ function AdminDashboard() {
       }
 
       const scrapedItems = json.items || [];
-      const dbItems = scrapedItems.map((item: any) => {
-        const { auto_approve, rejection_reason, ...rest } = item;
-        return {
-          ...rest,
-          status: auto_approve === true ? "active" : "rejected",
-          rejection_reason: auto_approve === true ? null : (rejection_reason || "Flagged by AI quality check"),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-      });
-
-      // Execute database insert and fetch generated items
-      const { data: insertedData, error } = await supabase.from("opportunities").insert(dbItems).select();
-      
-      if (error) {
-         console.error("Supabase insert error:", error);
-         alert("Data scraped, but failed to save to Database.");
-      }
-
-      // If DB fails, fallback to local display items so user still gets value
-      const itemsToUse = insertedData && insertedData.length > 0 
-        ? insertedData 
-        : dbItems.map((item: Record<string, unknown>, i: number) => ({ ...item, id: "ai_" + Date.now() + "_" + i }));
 
       // Update both admin and public lists
-      setAllOpportunities(prev => [...itemsToUse as any, ...prev]);
+      setAllOpportunities(prev => [...scrapedItems, ...prev]);
       setOpportunities(prev => {
-        const activeNew = (itemsToUse as any[]).filter((o: any) => o.status === "active");
+        const activeNew = scrapedItems.filter((o: any) => o.status === "active");
         return [...activeNew, ...prev];
       });
       setFilter("all"); 
