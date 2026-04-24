@@ -13,31 +13,34 @@ const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 // Sleep helper
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Call Gemini with extreme speed optimizations to prevent Vercel 10s Serverless timeout
+// Call Gemini with extreme speed optimizations and instant robust fallback
 async function callGeminiWithRetry(apiKey: string, prompt: string): Promise<string> {
   const genAI = new GoogleGenerativeAI(apiKey);
-  // gemini-2.5-flash is exceptionally fast. We do NOT use fallback models to avoid wasting time.
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  
+  // A waterfall of models from fastest/newest to most reliable older versions
+  const models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-flash", "gemini-pro"];
 
-  let delay = 500; // start with 500ms backoff, NOT 5000ms! (5000ms instantly kills Vercel hobby plan)
-  for (let attempt = 1; attempt <= 2; attempt++) { // Max 2 attempts to stay under 10s
+  for (const modelName of models) {
     try {
+      const model = genAI.getGenerativeModel({ model: modelName });
       const result = await model.generateContent(prompt);
       return result.response.text();
     } catch (err: any) {
-      const isRetryable = err.status === 503 || err.status === 429;
-      console.warn(`[SCRAPER] attempt ${attempt} failed (${err.status}): ${err.message}`);
-      if (isRetryable && attempt < 2) {
-        console.warn(`[SCRAPER] Retrying in ${delay}ms...`);
-        await sleep(delay);
-        delay *= 2; 
+      const isOverloaded = err.status === 503 || err.status === 429;
+      console.warn(`[SCRAPER] Model ${modelName} failed (${err.status}): ${err.message}`);
+      
+      if (isOverloaded) {
+        // If 503/429, instantly try the next model in the list without wasting time sleeping!
+        console.warn(`[SCRAPER] Instantly falling back to next available model...`);
+        continue;
       } else {
+        // If it's a hard error (like 403 Forbidden/Auth), throw it entirely.
         throw err;
       }
     }
   }
 
-  throw new Error("Gemini AI failed to respond in time.");
+  throw new Error("All AI models are currently overloaded. Please try again in a few minutes.");
 }
 
 export async function POST(req: Request) {
