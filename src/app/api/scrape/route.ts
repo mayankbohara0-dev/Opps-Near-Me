@@ -13,35 +13,31 @@ const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 // Sleep helper
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Call Gemini with exponential backoff retries. Tries gemini-flash-latest then gemini-2.5-flash.
+// Call Gemini with extreme speed optimizations to prevent Vercel 10s Serverless timeout
 async function callGeminiWithRetry(apiKey: string, prompt: string): Promise<string> {
-  const models = ["gemini-flash-latest", "gemini-2.5-flash"];
   const genAI = new GoogleGenerativeAI(apiKey);
+  // gemini-2.5-flash is exceptionally fast. We do NOT use fallback models to avoid wasting time.
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-  for (const modelName of models) {
-    let delay = 5000; // start with 5s backoff
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(prompt);
-        return result.response.text();
-      } catch (err: any) {
-        const isRetryable = err.status === 503 || err.status === 429;
-        console.warn(`[SCRAPER] ${modelName} attempt ${attempt} failed (${err.status}): ${err.message}`);
-        if (isRetryable && attempt < 3) {
-          console.warn(`[SCRAPER] Retrying ${modelName} in ${delay / 1000}s...`);
-          await sleep(delay);
-          delay *= 2; // exponential backoff
-        } else if (!isRetryable) {
-          // Not a retryable error (e.g. 404, 403) — skip this model entirely
-          console.warn(`[SCRAPER] ${modelName} not usable (${err.status}), trying next model.`);
-          break;
-        }
+  let delay = 500; // start with 500ms backoff, NOT 5000ms! (5000ms instantly kills Vercel hobby plan)
+  for (let attempt = 1; attempt <= 2; attempt++) { // Max 2 attempts to stay under 10s
+    try {
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    } catch (err: any) {
+      const isRetryable = err.status === 503 || err.status === 429;
+      console.warn(`[SCRAPER] attempt ${attempt} failed (${err.status}): ${err.message}`);
+      if (isRetryable && attempt < 2) {
+        console.warn(`[SCRAPER] Retrying in ${delay}ms...`);
+        await sleep(delay);
+        delay *= 2; 
+      } else {
+        throw err;
       }
     }
   }
 
-  throw new Error("All Gemini models failed after retries. The AI service is temporarily unavailable. Please try again in a few minutes.");
+  throw new Error("Gemini AI failed to respond in time.");
 }
 
 export async function POST(req: Request) {
