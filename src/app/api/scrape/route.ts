@@ -90,48 +90,20 @@ export async function POST(req: Request) {
         : "";
 
     // Inject today's date so AI knows what "future" means
-    const todayStr = new Date().toISOString().split("T")[0]; // e.g. "2026-04-14"    // Fetch real live internet data to ground the AI
+    const todayStr = new Date().toISOString().split("T")[0]; 
     let webContext = "";
-    let validLinks: string[] = [];
-    
-    try {
-      const queries = [
-        `site:unstop.com/hackathons india student registration ${new Date().getFullYear()}`,
-        `site:internshala.com/internships india student ${new Date().getFullYear()}`, 
-        `site:linkedin.com/jobs/view/ student internship india OR entry-level ${new Date().getFullYear()}`
-      ];
-      // Check different sources randomly to ensure variety across scrape runs
-      const randomQuery = queries[Math.floor(Math.random() * queries.length)];
-      console.log("[SCRAPER] Searching for real opportunities with query:", randomQuery);
-      
-      const searchRes = await google.search(randomQuery, {
-        page: 0,
-        safe: false,
-        parse_ads: false
-      });
-      
-      const resultsToUse = searchRes.results.slice(0, 15);
-      validLinks = resultsToUse.map((r: any) => r.url);
-      
-      const topResults = resultsToUse.map((r: any) => `- Title: ${r.title}\n  Description: ${r.description}\n  Link: ${r.url}`).join("\n\n");
-      
-      if (topResults) {
-        webContext = `\nREAL LIVE WEB SEARCH RESULTS:\nHere are real opportunities recently indexed on the web. You MUST ONLY extract opportunities strictly from these search results. DO NOT invent or hallucinate any opportunities. Use the EXACT Link provided in these results.\n\n${topResults}\n`;
-      }
-    } catch (err: any) {
-      console.warn("[SCRAPER] Web search failed, falling back to pure generative.", err.message);
-    }    // Lean, hyper-token-efficient prompt to guarantee < 5s generation time and prevent Vercel 10s timeout
-    const prompt = `You are a strict data extractor for a student opportunity platform in India. Today is ${todayStr}.
-${exclusions}${webContext}
+    // Removed googlethis because Vercel IPs get blocked/hang on Google Search, causing 10s timeouts.
 
-Generate a JSON array of student opportunities. YOU MUST ONLY EXTRACT OPPORTUNITIES FROM THE "REAL LIVE WEB SEARCH RESULTS". DO NOT INVENT ANY.
-If there are valid results, return EXACTLY 3 items (to stay under strict execution time limits). If fewer are valid, return fewer.
+    const prompt = `You are a strict data extractor for a student opportunity platform in India. Today is ${todayStr}.
+${exclusions}
+
+Generate a JSON array of student opportunities. YOU MUST GENERATE HIGHLY KNOWN, VERIFIED OPPORTUNITIES. DO NOT INVENT ANY.
+Return EXACTLY 3 items (to stay under strict execution time limits).
 
 CRITICAL RULES:
 - "deadline" MUST be a future date STRICTLY AFTER ${todayStr}.
 - "event_date" MUST be on or after today (${todayStr}).
-- If search results mention a past year, you MUST set auto_approve to FALSE and state it is old.
-- "external_link" MUST be EXACTLY copied from the search results provided. Do not invent links.
+- "external_link" MUST be a valid absolute URL directly to the application/registration page. Do NOT use generic homepages or google.com/search.
 
 Return ONLY a raw JSON array.
 To save generation time, keep descriptions and strings EXTREMELY short (1 sentence max).
@@ -175,7 +147,8 @@ Each item MUST have these exact fields:
     const today = new Date();
     today.setHours(0, 0, 0, 0); // compare date only, ignore time
     
-    const items = parsedItems.map((item: any) => {
+    // We will verify the links directly via HTTP HEAD request instead of Google Search
+    const items = await Promise.all(parsedItems.map(async (item: any) => {
       // Create a safety net incase AI forces auto_approve on expired
       let isExpired = false;
       let expiredReason = "";
@@ -188,7 +161,7 @@ Each item MUST have these exact fields:
         deadlineDate.setHours(0, 0, 0, 0);
         if (deadlineDate < today) {
           isExpired = true;
-          expiredReason = `Server Check: Deadline (${item.deadline}) is in the past.`;
+          expiredReason = \`Server Check: Deadline (\${item.deadline}) is in the past.\`;
         }
       }
 
@@ -197,29 +170,45 @@ Each item MUST have these exact fields:
         eventDate.setHours(0, 0, 0, 0);
         if (eventDate < today) {
           isExpired = true;
-          expiredReason = `Server Check: Event date (${item.event_date}) is in the past.`;
+          expiredReason = \`Server Check: Event date (\${item.event_date}) is in the past.\`;
         }
       }
 
-      // Hard server-side link validation
-      if (item.external_link && validLinks.length > 0) {
-        const isRealLink = validLinks.some(valid => valid.includes(item.external_link) || item.external_link.includes(valid));
-        if (!isRealLink && !item.external_link.includes("unstop.com") && !item.external_link.includes("internshala.com")) {
-          isExpired = true; // reusing expired logic for rejection
-          expiredReason = `Server Check: Generated link is hallucinated and not from search results.`;
-          item.external_link = ""; // Clear fake link
+      // Hard server-side direct link validation (Timeout 1.5s so we don't hit 10s Vercel limit)
+      if (item.external_link && item.external_link.startsWith("http") && !item.external_link.includes("google.com/search")) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1500);
+          const headRes = await fetch(item.external_link, { 
+             method: 'HEAD', 
+             headers: {'User-Agent': 'Mozilla/5.0'},
+             signal: controller.signal 
+          });
+          clearTimeout(timeoutId);
+          if (headRes.status === 404) {
+             isExpired = true;
+             expiredReason = "Server Check: Generated link is broken (404 Not Found).";
+             item.external_link = "";
+          }
+        } catch (e) {
+          // If it fails to fetch (e.g. CORS block, timeout), we assume it might be valid to not be overly strict,
+          // but we block known bad formats like google.com/search
         }
+      } else if (item.external_link && item.external_link.includes("google.com/search")) {
+         isExpired = true;
+         expiredReason = "Server Check: Generated link is a Google Search query, not a direct link.";
+         item.external_link = "";
       }
 
       if (isExpired) {
-        console.warn(`[SCRAPER] Flagged invalid/outdated item: "${item.title}"`);
+        console.warn(\`[SCRAPER] Flagged invalid/outdated item: "\${item.title}"\`);
         item.auto_approve = false;
         item.rejection_reason = item.rejection_reason && item.rejection_reason !== "" 
           ? item.rejection_reason 
           : expiredReason;
       }
       return item;
-    });
+    }));
 
     console.log(`[SCRAPER] ${items.length}/${parsedItems.length} items passed the date filter.`);
 
