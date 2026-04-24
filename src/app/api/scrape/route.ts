@@ -91,15 +91,15 @@ export async function POST(req: Request) {
         : "";
 
     // Inject today's date so AI knows what "future" means
-    const todayStr = new Date().toISOString().split("T")[0]; // e.g. "2026-04-14"
-
-    // Fetch real live internet data to ground the AI
+    const todayStr = new Date().toISOString().split("T")[0]; // e.g. "2026-04-14"    // Fetch real live internet data to ground the AI
     let webContext = "";
+    let validLinks: string[] = [];
+    
     try {
       const queries = [
-        `site:unstop.com/hackathons india student registration ${new Date().getFullYear()}`,
-        `site:internshala.com/internships india student ${new Date().getFullYear()}`, 
-        `site:linkedin.com/jobs/view/ student internship india OR entry-level ${new Date().getFullYear()}`
+        \`site:unstop.com/hackathons india student registration \${new Date().getFullYear()}\`,
+        \`site:internshala.com/internships india student \${new Date().getFullYear()}\`, 
+        \`site:linkedin.com/jobs/view/ student internship india OR entry-level \${new Date().getFullYear()}\`
       ];
       // Check different sources randomly to ensure variety across scrape runs
       const randomQuery = queries[Math.floor(Math.random() * queries.length)];
@@ -110,23 +110,26 @@ export async function POST(req: Request) {
         safe: false,
         parse_ads: false
       });
-      const topResults = searchRes.results.slice(0, 8).map((r: any) => `- Title: ${r.title}\n  Description: ${r.description}\n  Link: ${r.url}`).join("\n\n");
+      
+      const resultsToUse = searchRes.results.slice(0, 15);
+      validLinks = resultsToUse.map((r: any) => r.url);
+      
+      const topResults = resultsToUse.map((r: any) => \`- Title: \${r.title}\\n  Description: \${r.description}\\n  Link: \${r.url}\`).join("\\n\\n");
+      const topResults = resultsToUse.map((r: any) => `- Title: ${r.title}\n  Description: ${r.description}\n  Link: ${r.url}`).join("\n\n");
       
       if (topResults) {
-        webContext = `\nREAL LIVE WEB SEARCH RESULTS:\nHere are real opportunities recently indexed on the web. You MUST prioritize extracting your 10 opportunities from these real results whenever possible so that the links and titles are 100% genuine and not hallucinated. Use the Exact Link provided in these results.\n\n${topResults}\n`;
+        webContext = `\nREAL LIVE WEB SEARCH RESULTS:\nHere are real opportunities recently indexed on the web. You MUST ONLY extract opportunities strictly from these search results. DO NOT invent or hallucinate any opportunities. Use the EXACT Link provided in these results.\n\n${topResults}\n`;
       }
     } catch (err: any) {
       console.warn("[SCRAPER] Web search failed, falling back to pure generative.", err.message);
-    }
-
-    // Lean, token-efficient prompt with proper quality assessment
-    const prompt = `You are a quality-control data generator for a student opportunity platform in India.
+    }    // Lean, token-efficient prompt with proper quality assessment
+    const prompt = `You are a strict data extractor for a student opportunity platform in India.
 Today's date is ${todayStr}.
 ${exclusions}${webContext}
 
-Generate a JSON array of exactly 10 student opportunities. Since you are provided with REAL LIVE WEB SEARCH RESULTS, rely heavily on them to extract real world hackathons, internships, or events (especially from LinkedIn, Unstop, and Internshala).
-
-If the search results do not have enough diversity, you may generate the remaining items to reach exactly 10. Make sure the output represents diverse categories (e.g., hackathons, internships, workshops).
+Generate a JSON array of student opportunities. YOU MUST ONLY EXTRACT OPPORTUNITIES FROM THE "REAL LIVE WEB SEARCH RESULTS" PROVIDED ABOVE.
+DO NOT INVENT, GUESS, OR HALLUCINATE ANY OPPORTUNITIES. If there are only 5 valid results above, return exactly 5 items. 
+If web search results are missing, you may generate a maximum of 3 highly-known, verified annual opportunities, but ONLY if you are absolutely certain the exact URL is correct.
 
 DATE RULES (CRITICAL — strictly enforce):
 - "deadline" MUST be a future date STRICTLY AFTER ${todayStr}. Minimum deadline: at least 7 days from today.
@@ -135,7 +138,7 @@ DATE RULES (CRITICAL — strictly enforce):
 - If the search results mention a year in the past (e.g. 2023, 2024, 2025), DO NOT invent a future 2026 deadline for it. You MUST set auto_approve to FALSE and state that it is an old event.
 
 QUALITY CHECK (mandatory for every item):
-- The 'external_link' rule is STRICT. You MUST ONLY provide real, valid, direct URLs to the registration or opportunity page. Ensure the link points to the true origin of the opportunity (like unstop.com, internshala.com, etc.). Provide an empty string "" if you do not have a valid exact URL. Do NOT hallucinate fake links and do NOT use a Google search format.
+- The 'external_link' rule is STRICT. You MUST EXACTLY COPY the "Link" from the search results provided. NEVER invent a link. Do NOT use a Google search format. If a link does not start with https://, leave it empty.
 - Set auto_approve to TRUE only if the opportunity has: a clear description, a real location or "Remote", AND the external_link is fully valid. Do not use generic homepages if a specific application page exists.
 - Set auto_approve to FALSE if: the opportunity is vague, has no way to apply/register, the deadline/event is in the past, it seems fake, or it is from a previous year. Write a specific 1-sentence rejection_reason explaining exactly why.
 
@@ -176,7 +179,7 @@ Each item MUST have these exact fields:
 
     const parsedItems = JSON.parse(rawText.substring(startIndex, endIndex + 1));
 
-    // ── Hard server-side filter: Mark expired items as auto_approve=false instead of dropping them ──
+    // ── Hard server-side filter: Mark expired or hallucinated items as auto_approve=false ──
     const today = new Date();
     today.setHours(0, 0, 0, 0); // compare date only, ignore time
     
@@ -206,8 +209,18 @@ Each item MUST have these exact fields:
         }
       }
 
+      // Hard server-side link validation
+      if (item.external_link && validLinks.length > 0) {
+        const isRealLink = validLinks.some(valid => valid.includes(item.external_link) || item.external_link.includes(valid));
+        if (!isRealLink && !item.external_link.includes("unstop.com") && !item.external_link.includes("internshala.com")) {
+          isExpired = true; // reusing expired logic for rejection
+          expiredReason = `Server Check: Generated link is hallucinated and not from search results.`;
+          item.external_link = ""; // Clear fake link
+        }
+      }
+
       if (isExpired) {
-        console.warn(`[SCRAPER] Flagged outdated item: "${item.title}"`);
+        console.warn(`[SCRAPER] Flagged invalid/outdated item: "${item.title}"`);
         item.auto_approve = false;
         item.rejection_reason = item.rejection_reason && item.rejection_reason !== "" 
           ? item.rejection_reason 
