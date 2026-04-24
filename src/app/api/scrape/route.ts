@@ -120,46 +120,40 @@ export async function POST(req: Request) {
       }
     } catch (err: any) {
       console.warn("[SCRAPER] Web search failed, falling back to pure generative.", err.message);
-    }    // Lean, token-efficient prompt with proper quality assessment
-    const prompt = `You are a strict data extractor for a student opportunity platform in India.
-Today's date is ${todayStr}.
+    }    // Lean, hyper-token-efficient prompt to guarantee < 5s generation time and prevent Vercel 10s timeout
+    const prompt = `You are a strict data extractor for a student opportunity platform in India. Today is ${todayStr}.
 ${exclusions}${webContext}
 
-Generate a JSON array of student opportunities. YOU MUST ONLY EXTRACT OPPORTUNITIES FROM THE "REAL LIVE WEB SEARCH RESULTS" PROVIDED ABOVE.
-DO NOT INVENT, GUESS, OR HALLUCINATE ANY OPPORTUNITIES. If there are only 5 valid results above, return exactly 5 items. 
-If web search results are missing, you may generate a maximum of 3 highly-known, verified annual opportunities, but ONLY if you are absolutely certain the exact URL is correct.
+Generate a JSON array of student opportunities. YOU MUST ONLY EXTRACT OPPORTUNITIES FROM THE "REAL LIVE WEB SEARCH RESULTS". DO NOT INVENT ANY.
+If there are valid results, return EXACTLY 3 items (to stay under strict execution time limits). If fewer are valid, return fewer.
 
-DATE RULES (CRITICAL — strictly enforce):
-- "deadline" MUST be a future date STRICTLY AFTER ${todayStr}. Minimum deadline: at least 7 days from today.
-- "event_date" MUST also be on or after today (${todayStr}). Never use past dates.
-- Do NOT generate any opportunity whose event or deadline has already passed. Ensure dates match any data found in the real web search results.
-- If the search results mention a year in the past (e.g. 2023, 2024, 2025), DO NOT invent a future 2026 deadline for it. You MUST set auto_approve to FALSE and state that it is an old event.
+CRITICAL RULES:
+- "deadline" MUST be a future date STRICTLY AFTER ${todayStr}.
+- "event_date" MUST be on or after today (${todayStr}).
+- If search results mention a past year, you MUST set auto_approve to FALSE and state it is old.
+- "external_link" MUST be EXACTLY copied from the search results provided. Do not invent links.
 
-QUALITY CHECK (mandatory for every item):
-- The 'external_link' rule is STRICT. You MUST EXACTLY COPY the "Link" from the search results provided. NEVER invent a link. Do NOT use a Google search format. If a link does not start with https://, leave it empty.
-- Set auto_approve to TRUE only if the opportunity has: a clear description, a real location or "Remote", AND the external_link is fully valid. Do not use generic homepages if a specific application page exists.
-- Set auto_approve to FALSE if: the opportunity is vague, has no way to apply/register, the deadline/event is in the past, it seems fake, or it is from a previous year. Write a specific 1-sentence rejection_reason explaining exactly why.
-
-Return ONLY a raw JSON array — no markdown, no backticks, no explanation.
+Return ONLY a raw JSON array.
+To save generation time, keep descriptions and strings EXTREMELY short (1 sentence max).
 
 Each item MUST have these exact fields:
 {
-  "title": "string",
-  "description": "2-3 sentence overview",
+  "title": "string (short)",
+  "description": "1 short sentence max",
   "category": "hackathon" | "sports" | "internship" | "event",
   "organizer_name": "string",
   "location_city": "string",
   "location_area": "string",
   "deadline": "YYYY-MM-DD",
-  "contact_email": "string or empty string",
-  "contact_phone": "string or empty string",
-  "external_link": "Valid absolute URL starting with https:// directly to registration, or empty string",
+  "contact_email": "",
+  "contact_phone": "",
+  "external_link": "absolute URL",
   "event_date": "YYYY-MM-DD",
-  "eligibility": "who can apply",
-  "requirements": "what to bring or prepare",
-  "what_offered": "prizes, stipend, certificates etc",
+  "eligibility": "1 short phrase",
+  "requirements": "",
+  "what_offered": "1 short phrase",
   "auto_approve": true or false,
-  "rejection_reason": "empty string if auto_approve is true, else specific reason"
+  "rejection_reason": "if false, 1 short phrase why"
 }`;
 
     // Call Gemini with retry + fallback
