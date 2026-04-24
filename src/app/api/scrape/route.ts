@@ -97,9 +97,9 @@ export async function POST(req: Request) {
     
     try {
       const queries = [
-        \`site:unstop.com/hackathons india student registration \${new Date().getFullYear()}\`,
-        \`site:internshala.com/internships india student \${new Date().getFullYear()}\`, 
-        \`site:linkedin.com/jobs/view/ student internship india OR entry-level \${new Date().getFullYear()}\`
+        `site:unstop.com/hackathons india student registration ${new Date().getFullYear()}`,
+        `site:internshala.com/internships india student ${new Date().getFullYear()}`, 
+        `site:linkedin.com/jobs/view/ student internship india OR entry-level ${new Date().getFullYear()}`
       ];
       // Check different sources randomly to ensure variety across scrape runs
       const randomQuery = queries[Math.floor(Math.random() * queries.length)];
@@ -114,7 +114,6 @@ export async function POST(req: Request) {
       const resultsToUse = searchRes.results.slice(0, 15);
       validLinks = resultsToUse.map((r: any) => r.url);
       
-      const topResults = resultsToUse.map((r: any) => \`- Title: \${r.title}\\n  Description: \${r.description}\\n  Link: \${r.url}\`).join("\\n\\n");
       const topResults = resultsToUse.map((r: any) => `- Title: ${r.title}\n  Description: ${r.description}\n  Link: ${r.url}`).join("\n\n");
       
       if (topResults) {
