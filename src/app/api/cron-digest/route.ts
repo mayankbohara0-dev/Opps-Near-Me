@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin as supabase } from "@/lib/supabase-server";
 import { Resend } from "resend";
 
+// Resolve production base URL
+const getBaseUrl = () => {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
+};
 
 export async function GET(req: Request) {
   try {
@@ -28,6 +34,7 @@ export async function GET(req: Request) {
     }
 
     const emails = subs.map((s: any) => s.email);
+    const baseUrl = getBaseUrl();
 
     // 3. Construct beautiful email HTML using our brand colors (Parchment & Terracotta)
     const itemsHtml = opps.map((o: any) => `
@@ -35,7 +42,7 @@ export async function GET(req: Request) {
         <h3 style="margin: 0 0 8px 0; color: #141413; font-family: Georgia, serif;">${o.title}</h3>
         <p style="margin: 0 0 4px 0; color: #87867f; font-size: 14px;"><strong>${o.location_city}</strong> | Deadline: ${o.deadline}</p>
         <p style="margin: 0 0 16px 0; color: #5e5d59; font-size: 14px;">${o.description}</p>
-        <a href="https://yourdomain.com/opportunity/${o.id}" style="display: inline-block; padding: 8px 16px; background-color: #c96442; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 13px;">View Details</a>
+        <a href="${baseUrl}/opportunity/${o.id}" style="display: inline-block; padding: 8px 16px; background-color: #c96442; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 13px;">View Details</a>
       </div>
     `).join("");
 
@@ -62,3 +69,4 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+

@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/jwt";
 import { supabaseAdmin as supabase } from "@/lib/supabase-server";
-import google from "googlethis";
+// googlethis removed — Vercel IPs are blocked by Google Search
 
 // Increase Vercel serverless function timeout to 60 seconds
 export const maxDuration = 60;
@@ -13,34 +13,40 @@ const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 // Sleep helper
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Call Gemini with extreme speed optimizations and instant robust fallback
+// Call Gemini with fallback waterfall across all available models
 async function callGeminiWithRetry(apiKey: string, prompt: string): Promise<string> {
   const genAI = new GoogleGenerativeAI(apiKey);
   
-  // A waterfall of models from fastest/newest to most reliable older versions
-  const models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-flash", "gemini-pro"];
+  // Only use confirmed-valid model IDs (newest/fastest first)
+  const models = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.5-pro",
+  ];
 
   for (const modelName of models) {
     try {
+      console.log(`[SCRAPER] Trying model: ${modelName}`);
       const model = genAI.getGenerativeModel({ model: modelName });
       const result = await model.generateContent(prompt);
+      console.log(`[SCRAPER] Success with model: ${modelName}`);
       return result.response.text();
     } catch (err: any) {
       const isOverloaded = err.status === 503 || err.status === 429;
+      const isNotFound   = err.status === 404;
       console.warn(`[SCRAPER] Model ${modelName} failed (${err.status}): ${err.message}`);
       
-      if (isOverloaded) {
-        // If 503/429, instantly try the next model in the list without wasting time sleeping!
-        console.warn(`[SCRAPER] Instantly falling back to next available model...`);
+      if (isOverloaded || isNotFound) {
+        // Overloaded or model not found for this API version — try next
         continue;
       } else {
-        // If it's a hard error (like 403 Forbidden/Auth), throw it entirely.
+        // Hard error (e.g. 403 Forbidden) — stop immediately
         throw err;
       }
     }
   }
 
-  throw new Error("All AI models are currently overloaded. Please try again in a few minutes.");
+  throw new Error("All AI models are currently unavailable. Please try again in a few minutes.");
 }
 
 export async function POST(req: Request) {

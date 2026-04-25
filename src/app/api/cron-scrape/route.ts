@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin as supabase } from "@/lib/supabase-server";
-import google from "googlethis";
+// googlethis removed — Vercel IPs are blocked by Google Search
 
 export const maxDuration = 60; // Increase Vercel serverless function timeout to 60 seconds
 
@@ -10,25 +10,32 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Call Gemini with exponential backoff retries.
 async function callGeminiWithRetry(apiKey: string, prompt: string): Promise<string> {
-  const models = ["gemini-flash-latest", "gemini-2.5-flash"];
+  // Only confirmed-valid model IDs — gemini-flash-latest and gemini-1.5-flash are deprecated/not found
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"];
   const genAI = new GoogleGenerativeAI(apiKey);
 
   for (const modelName of models) {
-    let delay = 5000; // start with 5s backoff
+    let delay = 5000;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
+        console.log(`[CRON] Trying model: ${modelName} (attempt ${attempt})`);
         const model = genAI.getGenerativeModel({ model: modelName });
         const result = await model.generateContent(prompt);
+        console.log(`[CRON] Success with model: ${modelName}`);
         return result.response.text();
       } catch (err: any) {
         const isRetryable = err.status === 503 || err.status === 429;
+        const isNotFound  = err.status === 404;
         console.warn(`[CRON] ${modelName} attempt ${attempt} failed (${err.status}): ${err.message}`);
-        if (isRetryable && attempt < 3) {
+        if (isNotFound) {
+          // Model doesn't exist in this API version — skip to next model immediately
+          break;
+        } else if (isRetryable && attempt < 3) {
           console.warn(`[CRON] Retrying ${modelName} in ${delay / 1000}s...`);
           await sleep(delay);
           delay *= 2;
         } else if (!isRetryable) {
-          console.warn(`[CRON] ${modelName} not usable (${err.status}), trying next model.`);
+          console.warn(`[CRON] ${modelName} returned hard error (${err.status}), trying next model.`);
           break;
         }
       }

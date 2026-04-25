@@ -4,6 +4,26 @@ import { supabaseAdmin as supabase } from "@/lib/supabase-server";
 
 const rateLimitMap = new Map<string, { count: number, resetTime: number }>();
 
+// Shared model waterfall — same valid IDs used across all AI routes
+async function callGeminiWithRetry(apiKey: string, prompt: string): Promise<string> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"];
+
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    } catch (err: any) {
+      const skip = err.status === 503 || err.status === 429 || err.status === 404;
+      console.warn(`[ANALYZE] Model ${modelName} failed (${err.status}): ${err.message}`);
+      if (skip) continue;
+      throw err;
+    }
+  }
+  throw new Error("All AI models unavailable. Please try again later.");
+}
+
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get("x-forwarded-for") || "unknown";
@@ -26,8 +46,6 @@ export async function POST(req: Request) {
 
     const item = await req.json();
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `
       You are an automated Quality Assurance AI for a student opportunity platform in India.
@@ -53,9 +71,8 @@ export async function POST(req: Request) {
       }
     `;
 
-    const result = await model.generateContent(prompt);
-    let text = result.response.text().trim();
-    
+    let text = await callGeminiWithRetry(apiKey, prompt.trim());
+    text = text.trim();
     if (text.startsWith("\`\`\`json")) text = text.replace(/\`\`\`json/g, "").replace(/\`\`\`/g, "").trim();
 
     const analysis = JSON.parse(text);

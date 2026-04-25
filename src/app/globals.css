@@ -2,9 +2,9 @@
 /* Georgia as serif fallback for Anthropic Serif                             */
 /* system-ui/Inter as sans fallback for Anthropic Sans                      */
 
-@import "tailwindcss";
-
 @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@import "tailwindcss";
 
 /* ─── Design Tokens ─────────────────────────────────────────────────────── */
 :root {

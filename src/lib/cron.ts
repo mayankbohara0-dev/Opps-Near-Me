@@ -7,20 +7,27 @@ const globalForCron = global as unknown as { __cronStarted: boolean };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function callGeminiWithRetry(apiKey: string, prompt: string): Promise<string> {
-  const models = ["gemini-flash-latest", "gemini-2.5-flash"];
+  // Only confirmed-valid model IDs — gemini-flash-latest/gemini-1.5-flash are deprecated/not found
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"];
   const genAI = new GoogleGenerativeAI(apiKey);
 
   for (const modelName of models) {
     let delay = 5000;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
+        console.log(`[CRON] Trying model: ${modelName} (attempt ${attempt})`);
         const model = genAI.getGenerativeModel({ model: modelName });
         const result = await model.generateContent(prompt);
+        console.log(`[CRON] Success with model: ${modelName}`);
         return result.response.text();
       } catch (err: any) {
         const isRetryable = err.status === 503 || err.status === 429;
+        const isNotFound  = err.status === 404;
         console.warn(`[CRON] ${modelName} attempt ${attempt} failed (${err.status})`);
-        if (isRetryable && attempt < 3) {
+        if (isNotFound) {
+          // Model not available in this API version — skip immediately
+          break;
+        } else if (isRetryable && attempt < 3) {
           console.warn(`[CRON] Retrying in ${delay / 1000}s...`);
           await sleep(delay);
           delay *= 2;
