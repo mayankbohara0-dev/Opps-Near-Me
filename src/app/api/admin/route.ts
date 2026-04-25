@@ -17,6 +17,17 @@ export async function POST(req: Request) {
       await supabase.from("opportunities").update({ status: "rejected", updated_at: new Date().toISOString() }).eq("id", id);
     } else if (action === "delete") {
       await supabase.from("opportunities").delete().eq("id", id);
+    } else if (action === "cleanup") {
+      // Delete rejected/expired items older than 30 days to keep DB lean
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 30);
+      const { error: cleanupError, count } = await supabase
+        .from("opportunities")
+        .delete({ count: "exact" })
+        .in("status", ["rejected", "expired"])
+        .lt("updated_at", cutoff.toISOString());
+      if (cleanupError) throw cleanupError;
+      return NextResponse.json({ success: true, deleted: count ?? 0 });
     } else {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }

@@ -5,7 +5,7 @@ import { CATEGORY_META, getDaysUntilDeadline } from "@/lib/data";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  CheckCircle, XCircle, Search, AlertTriangle, Eye, ShieldCheck, Sparkles, Trash2
+  CheckCircle, XCircle, Search, AlertTriangle, Eye, ShieldCheck, Sparkles, Trash2, RefreshCcw
 } from "lucide-react";
 import Link from "next/link";
 import { useData } from "@/contexts/DataContext";
@@ -35,6 +35,7 @@ function AdminDashboard() {
   const [filter, setFilter] = useState<string | "all">("all");
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeMessage, setScrapeMessage] = useState("");
+  const [isCleaning, setIsCleaning] = useState(false);
 
   // Load all opportunities (including pending/rejected) on admin mount
   useEffect(() => {
@@ -73,6 +74,29 @@ function AdminDashboard() {
       alert("Network error: Could not reach the scraper API.");
     } finally {
       setIsScraping(false);
+    }
+  };
+
+  const runCleanup = async () => {
+    if (!confirm("This will permanently delete all rejected/expired items older than 30 days. Continue?")) return;
+    setIsCleaning(true);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cleanup" }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        alert(`Cleanup complete. ${json.deleted ?? 0} stale items removed.`);
+        refreshData(true);
+      } else {
+        alert("Cleanup failed: " + (json.error || "Unknown error"));
+      }
+    } catch {
+      alert("Network error during cleanup.");
+    } finally {
+      setIsCleaning(false);
     }
   };
 
@@ -132,7 +156,23 @@ function AdminDashboard() {
               Signed in as <strong style={{ color:"#0099ff" }}>{user?.email}</strong>
             </p>
           </div>
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={runCleanup}
+              disabled={isCleaning}
+              className="btn"
+              style={{
+                gap: 8, fontSize: 13, padding: "9px 16px",
+                background: "rgba(239,68,68,0.1)",
+                color: isCleaning ? "#a6a6a6" : "#f87171",
+                cursor: isCleaning ? "wait" : "pointer",
+                border: "1px solid rgba(239,68,68,0.2)",
+                borderRadius: 8, display: "inline-flex", alignItems: "center",
+              }}
+            >
+              <RefreshCcw size={13} />
+              {isCleaning ? "Cleaning…" : "Clean Up Old Items"}
+            </button>
             <button
               onClick={runAiScraper}
               disabled={isScraping}
@@ -156,7 +196,7 @@ function AdminDashboard() {
                 </>
               ) : (
                 <>
-                  <Sparkles size={14} /> Run AI Auto-Scraper
+                  <Sparkles size={14} /> Run AI Scraper
                 </>
               )}
             </button>
@@ -191,6 +231,20 @@ function AdminDashboard() {
           })}
         </div>
 
+        {/* info: AI suggestions need review */}
+        <div style={{
+          display:"flex", alignItems:"flex-start", gap:12, padding:"14px 18px",
+          borderRadius:10, marginBottom:16,
+          background:"rgba(99,102,241,0.05)", border:"1px solid rgba(99,102,241,0.2)",
+        }}>
+          <AlertTriangle size={14} style={{ color:"#818cf8", flexShrink:0, marginTop:1 }} />
+          <p style={{ fontSize:12, color:"rgba(165,180,252,0.9)", letterSpacing:"-0.1px", lineHeight:1.6, margin:0 }}>
+            <strong style={{color:"#c7d2fe"}}>AI Scraper Note:</strong> The "Run AI Scraper" button generates AI-<em>suggested</em> opportunities — not live data from Unstop/Internshala.
+            Suggested items land in <strong style={{color:"#fbbf24"}}>Pending</strong> status and must be reviewed and approved here before going public on the feed.
+            For real live data, connect Unstop/Internshala APIs or Puppeteer.
+          </p>
+        </div>
+
         {/* pending alert */}
         {counts.pending > 0 && (
           <div style={{
@@ -200,8 +254,8 @@ function AdminDashboard() {
           }}>
             <AlertTriangle size={14} style={{ color:"#fbbf24", flexShrink:0 }} />
             <p style={{ fontSize:13, color:"rgba(251,191,36,0.85)", letterSpacing:"-0.1px" }}>
-              <strong>{counts.pending} listing{counts.pending>1?"s":""}</strong> awaiting review.
-              Approve or reject to keep the feed fresh.
+              <strong>{counts.pending} AI-suggested listing{counts.pending>1?"s":""}</strong> awaiting your review.
+              Approve to publish to the public feed, or reject to discard.
             </p>
           </div>
         )}

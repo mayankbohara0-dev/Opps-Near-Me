@@ -65,11 +65,38 @@ async function validateLink(url: string): Promise<{ ok: boolean; reason: string 
   }
 }
 
+// ── Cleanup old rejected/expired items ───────────────────────────────────────
+async function cleanupStaleItems() {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30); // 30 days ago
+  const cutoffStr = cutoff.toISOString();
+
+  const { error, count } = await supabase
+    .from("opportunities")
+    .delete({ count: "exact" })
+    .in("status", ["rejected", "expired"])
+    .lt("updated_at", cutoffStr);
+
+  if (error) {
+    console.warn("[CRON] Cleanup error (non-fatal):", error.message);
+  } else {
+    console.log(`[CRON] 🧹 Cleaned up ${count ?? 0} stale rejected/expired items older than 30 days.`);
+  }
+}
+
 export async function GET(req: Request) {
   try {
-    // 1. Verify Vercel Cron Security
+    // ── 1. Verify Vercel Cron Security ────────────────────────────────────────
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) {
+      // Log a loud warning — the job will 401 every time silently otherwise
+      console.error("[CRON] ⚠️  CRON_SECRET env var is not set! Set it in Vercel environment variables. All cron calls will fail authentication until this is fixed.");
+      return NextResponse.json({ error: "Server misconfiguration: CRON_SECRET not set." }, { status: 500 });
+    }
+
     const authHeader = req.headers.get("authorization");
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      console.warn("[CRON] 🔒 Unauthorized cron request — invalid or missing Bearer token.");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -78,7 +105,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Gemini API key not configured." }, { status: 500 });
     }
 
-    // 2. Fetch existing titles from DB to avoid duplicates
+    // ── 2. Cleanup stale items first (keeps DB lean) ─────────────────────────
+    await cleanupStaleItems();
+
+    // ── 3. Fetch existing titles from DB to avoid duplicates ─────────────────
     const { data: existingData } = await supabase
       .from("opportunities")
       .select("title")
@@ -94,12 +124,18 @@ export async function GET(req: Request) {
 
     const todayStr = new Date().toISOString().split("T")[0];
 
-    // 3. Prompt
+    // ── 4. Prompt ─────────────────────────────────────────────────────────────
+    // NOTE: This uses AI to SUGGEST opportunities — not live scraping.
+    // Items go into "pending" status for admin review before going public.
+    // To connect to real live data, Unstop/Internshala APIs or Puppeteer are required.
     const prompt = `You are a strict data generator for a student opportunity platform in India. Today is ${todayStr}.
 ${exclusions}
 
-Generate a JSON array of EXACTLY 20 real student opportunities from India.
+Generate a JSON array of EXACTLY 20 suggested student opportunities from India.
 Mix of categories: at least 6 hackathons, 6 internships, 4 events/workshops, 4 sports/other.
+
+IMPORTANT DISCLAIMER: You are generating SUGGESTED opportunities based on typical patterns.
+These will be reviewed by a human admin before publishing. Be as accurate as possible.
 
 ━━━ LINK RULES (CRITICAL — our server checks every link via HTTP) ━━━
 IMPORTANT: Do NOT provide links to specific opportunity pages (those expire and return 404).
@@ -160,7 +196,7 @@ Each item MUST have EXACTLY these fields:
 
     const parsedItems = JSON.parse(rawText.substring(startIndex, endIndex + 1));
 
-    // 4. Server-side validation (dates + strict link checks)
+    // ── 5. Server-side validation (dates + strict link checks) ───────────────
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -213,29 +249,35 @@ Each item MUST have EXACTLY these fields:
     }));
 
     const approved = validatedItems.filter((i: any) => i.auto_approve === true).length;
-    console.log(`[CRON] ${approved}/${validatedItems.length} auto-approved with verified links.`);
+    console.log(`[CRON] ${approved}/${validatedItems.length} passed quality checks.`);
 
-    // 5. Format for DB
+    // ── 6. Format for DB ──────────────────────────────────────────────────────
+    // AI-approved items go to "pending" for human review before going public.
+    // Only an admin can promote them to "active" via the admin panel.
     const dbItems = validatedItems.map((item: any) => {
       const { auto_approve, rejection_reason, ...rest } = item;
       return {
         ...rest,
-        status: auto_approve === true ? "active" : "rejected",
+        // AI-suggested items always start as "pending" — a human must approve them.
+        // Items that failed server validation go straight to "rejected".
+        status: auto_approve === true ? "pending" : "rejected",
         rejection_reason: auto_approve === true ? null : (item.rejection_reason || "Flagged by quality check"),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
     });
 
-    // 6. Insert into Supabase
+    // ── 7. Insert into Supabase ───────────────────────────────────────────────
     const { error } = await supabase.from("opportunities").insert(dbItems);
     if (error) {
       console.error("[CRON] Supabase insert error:", error);
       throw error;
     }
 
-    console.log(`[CRON] Successfully inserted ${dbItems.length} items to database.`);
-    return NextResponse.json({ success: true, count: dbItems.length, approved });
+    const pendingCount = dbItems.filter((i: any) => i.status === "pending").length;
+    const rejectedCount = dbItems.filter((i: any) => i.status === "rejected").length;
+    console.log(`[CRON] ✅ Inserted ${dbItems.length} items: ${pendingCount} pending review, ${rejectedCount} auto-rejected.`);
+    return NextResponse.json({ success: true, total: dbItems.length, pending: pendingCount, rejected: rejectedCount });
 
   } catch (error: any) {
     console.error("[CRON] Fatal error:", error.message || error);
