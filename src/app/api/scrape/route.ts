@@ -161,7 +161,7 @@ Each item MUST have these exact fields:
         deadlineDate.setHours(0, 0, 0, 0);
         if (deadlineDate < today) {
           isExpired = true;
-          expiredReason = \`Server Check: Deadline (\${item.deadline}) is in the past.\`;
+          expiredReason = `Server Check: Deadline (${item.deadline}) is in the past.`;
         }
       }
 
@@ -170,7 +170,7 @@ Each item MUST have these exact fields:
         eventDate.setHours(0, 0, 0, 0);
         if (eventDate < today) {
           isExpired = true;
-          expiredReason = \`Server Check: Event date (\${item.event_date}) is in the past.\`;
+          expiredReason = `Server Check: Event date (${item.event_date}) is in the past.`;
         }
       }
 
@@ -201,7 +201,7 @@ Each item MUST have these exact fields:
       }
 
       if (isExpired) {
-        console.warn(\`[SCRAPER] Flagged invalid/outdated item: "\${item.title}"\`);
+        console.warn(`[SCRAPER] Flagged invalid/outdated item: "${item.title}"`);
         item.auto_approve = false;
         item.rejection_reason = item.rejection_reason && item.rejection_reason !== "" 
           ? item.rejection_reason 
