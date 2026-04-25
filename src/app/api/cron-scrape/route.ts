@@ -252,15 +252,13 @@ Each item MUST have EXACTLY these fields:
     console.log(`[CRON] ${approved}/${validatedItems.length} passed quality checks.`);
 
     // ── 6. Format for DB ──────────────────────────────────────────────────────
-    // AI-approved items go to "pending" for human review before going public.
-    // Only an admin can promote them to "active" via the admin panel.
+    // Items that passed all server-side checks (valid dates + working link) go live immediately.
+    // Items that failed server validation go straight to rejected.
     const dbItems = validatedItems.map((item: any) => {
       const { auto_approve, rejection_reason, ...rest } = item;
       return {
         ...rest,
-        // AI-suggested items always start as "pending" — a human must approve them.
-        // Items that failed server validation go straight to "rejected".
-        status: auto_approve === true ? "pending" : "rejected",
+        status: auto_approve === true ? "active" : "rejected",
         rejection_reason: auto_approve === true ? null : (item.rejection_reason || "Flagged by quality check"),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

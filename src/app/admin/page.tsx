@@ -231,7 +231,7 @@ function AdminDashboard() {
           })}
         </div>
 
-        {/* info: AI suggestions need review */}
+        {/* info: AI auto-approval */}
         <div style={{
           display:"flex", alignItems:"flex-start", gap:12, padding:"14px 18px",
           borderRadius:10, marginBottom:16,
@@ -239,9 +239,9 @@ function AdminDashboard() {
         }}>
           <AlertTriangle size={14} style={{ color:"#818cf8", flexShrink:0, marginTop:1 }} />
           <p style={{ fontSize:12, color:"rgba(165,180,252,0.9)", letterSpacing:"-0.1px", lineHeight:1.6, margin:0 }}>
-            <strong style={{color:"#c7d2fe"}}>AI Scraper Note:</strong> The "Run AI Scraper" button generates AI-<em>suggested</em> opportunities — not live data from Unstop/Internshala.
-            Suggested items land in <strong style={{color:"#fbbf24"}}>Pending</strong> status and must be reviewed and approved here before going public on the feed.
-            For real live data, connect Unstop/Internshala APIs or Puppeteer.
+            <strong style={{color:"#c7d2fe"}}>AI Scraper Note:</strong> The scraper generates AI-<em>suggested</em> opportunities — not live data from Unstop/Internshala.
+            Items that pass server-side validation (valid dates + working link) go <strong style={{color:"#34d399"}}>Active</strong> automatically.
+            Items that fail validation land in <strong style={{color:"#f87171"}}>Rejected</strong> — you can review and manually approve any that look correct.
           </p>
         </div>
 

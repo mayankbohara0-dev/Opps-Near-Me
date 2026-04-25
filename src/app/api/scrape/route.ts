@@ -227,9 +227,9 @@ Each item MUST have EXACTLY these fields:
       const { auto_approve, rejection_reason, ...rest } = item;
       return {
         ...rest,
-        // AI-suggested items always start as "pending" — admin must approve before going public.
-        // Items that failed server-side validation go straight to "rejected".
-        status: auto_approve === true ? "pending" : "rejected",
+        // Items that passed all server-side checks go live immediately.
+        // Items that failed validation go to rejected.
+        status: auto_approve === true ? "active" : "rejected",
         rejection_reason: auto_approve === true ? null : (rejection_reason || "Flagged by quality check"),
       };
     });
