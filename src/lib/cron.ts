@@ -85,20 +85,38 @@ async function runScrapingTask() {
             .join(", ")}]`
         : "";
 
-    const prompt = `You are a quality-control data generator for a student opportunity platform in India.
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    const prompt = `You are a strict data generator for a student opportunity platform in India. Today is ${todayStr}.
 ${exclusions}
 
-Generate a JSON array of exactly 5 student opportunities from diverse Indian cities (Delhi, Mumbai, Bengaluru, Chennai, Hyderabad, Pune, Remote, etc).
+Generate a JSON array of EXACTLY 10 real student opportunities from diverse Indian cities (Delhi, Mumbai, Bengaluru, Chennai, Hyderabad, Pune, Remote, etc).
+Include: 3 hackathons, 3 internships, 2 events/workshops, 2 sports/extra-curricular.
 
-Include: 1 hackathon, 1 internship, 1 workshop/event, 1 sports/extra-curricular, 1 any category.
+━━━ LINK RULES (CRITICAL) ━━━
+1. ONLY provide links from these trusted platforms with REAL, LIVE pages:
+   - unstop.com       → e.g. https://unstop.com/hackathons/name-organizer-123456
+   - internshala.com  → e.g. https://internshala.com/internship/detail/name-at-company-city
+   - devfolio.co      → e.g. https://xyz-hackathon.devfolio.co
+   - dare2compete.com → e.g. https://dare2compete.com/competition/name-123
+   - hackerearth.com  → e.g. https://www.hackerearth.com/challenges/hackathon/name
+   - linkedin.com     → e.g. https://www.linkedin.com/jobs/view/1234567890
+   - skillenza.com, townscript.com, insider.in (for events)
+2. NEVER use: homepage-only URLs, google.com, bing.com, example.com, or guessed URLs.
+3. If NOT 100% certain a page is LIVE → use "" (empty string). Empty is better than wrong.
 
-QUALITY CHECK (mandatory for every item):
-- Set auto_approve to TRUE only if the opportunity has: a clear description, a real location or "Remote", AND at least one of (external_link OR contact_email) that students can actually use to apply.
-- Set auto_approve to FALSE if: the opportunity is vague, has no way to apply/register, the event has already passed, or it seems fake/hallucinated. Write a specific 1-sentence rejection_reason explaining exactly why.
+━━━ DATE RULES ━━━
+- "deadline" MUST be strictly after ${todayStr} (at least 7 days).
+- "event_date" MUST be on or after ${todayStr}.
+- NEVER use past dates.
 
-Return ONLY a raw JSON array — no markdown, no backticks, no explanation.
+━━━ QUALITY ━━━
+- auto_approve: true ONLY IF clear description, real location, AND verified live external_link.
+- auto_approve: false if link empty/broken, dates past, or vague. Give specific rejection_reason.
 
-Each item MUST have these exact fields:
+Return ONLY a raw JSON array. No markdown, no backticks.
+
+Each item MUST have EXACTLY these fields:
 {
   "title": "string",
   "description": "2-3 sentence overview",
@@ -109,13 +127,13 @@ Each item MUST have these exact fields:
   "deadline": "YYYY-MM-DD",
   "contact_email": "string or empty string",
   "contact_phone": "string or empty string",
-  "external_link": "URL or empty string",
+  "external_link": "Verified live URL from trusted platform, or empty string if unsure",
   "event_date": "YYYY-MM-DD",
   "eligibility": "who can apply",
   "requirements": "what to bring or prepare",
   "what_offered": "prizes, stipend, certificates etc",
   "auto_approve": true or false,
-  "rejection_reason": "empty string if auto_approve is true, else specific reason"
+  "rejection_reason": "empty string if auto_approve true, else specific 1-sentence reason"
 }`;
 
     const rawText = await callGeminiWithRetry(apiKey, prompt);
