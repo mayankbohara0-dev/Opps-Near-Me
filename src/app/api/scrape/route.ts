@@ -106,19 +106,22 @@ ${exclusions}
 
 Generate a JSON array of EXACTLY 10 real student opportunities from India.
 
-━━━ LINK RULES (CRITICAL — enforced server-side) ━━━
-Our server performs live HTTP checks on every link you provide. Broken links cause AUTOMATIC REJECTION.
-1. ONLY provide links from these trusted platforms with REAL, LIVE pages:
-   - unstop.com       → e.g. https://unstop.com/hackathons/name-organizer-123456
-   - internshala.com  → e.g. https://internshala.com/internship/detail/name-at-company-city
-   - devfolio.co      → e.g. https://xyz-hackathon.devfolio.co
-   - dare2compete.com → e.g. https://dare2compete.com/competition/name-123
-   - hackerearth.com  → e.g. https://www.hackerearth.com/challenges/hackathon/name
-   - linkedin.com     → e.g. https://www.linkedin.com/jobs/view/1234567890
-   - skillenza.com, townscript.com, insider.in (for events)
-2. NEVER use: homepage-only URLs, google.com/search, bing.com, example.com, or guessed URLs.
-3. If you are NOT 100% certain a specific page URL is LIVE today → set external_link to "" (empty string).
-4. A wrong/broken URL is WORSE than an empty one. Empty links go to "pending" review; broken links are deleted.
+━━━ LINK RULES (CRITICAL — our server checks every link via HTTP) ━━━
+IMPORTANT: Do NOT provide links to specific opportunity pages (those expire and return 404).
+Instead, provide the HOMEPAGE or MAIN LISTING PAGE of the platform where students can find and apply.
+These stable URLs always stay live:
+   - Hackathons on Unstop   → https://unstop.com/hackathons
+   - Internships on Unstop  → https://unstop.com/internships
+   - Internshala            → https://internshala.com/internships
+   - Devfolio hackathons    → https://devfolio.co/hackathons
+   - HackerEarth challenges → https://www.hackerearth.com/challenges
+   - Dare2Compete           → https://dare2compete.com/competitions
+   - LinkedIn jobs          → https://www.linkedin.com/jobs
+   - Skillenza              → https://skillenza.com
+   - Townscript events      → https://www.townscript.com/in/events
+   - Insider events         → https://insider.in
+NEVER use: google.com, bing.com, example.com, or any deep/specific page URL.
+The external_link should be where a student can GO to search for and apply to this opportunity.
 
 ━━━ DATE RULES ━━━
 - "deadline" MUST be strictly after ${todayStr} (minimum 7 days from now).
