@@ -70,43 +70,25 @@ export async function GET(req: Request) {
         : "";
 
     const todayStr = new Date().toISOString().split("T")[0];
-    const currentYear = new Date().getFullYear();
 
-    // 3. Web Context
-    let webContext = "";
-    try {
-      const queries = [
-        `site:unstop.com/hackathons india student registration ${currentYear}`,
-        `site:internshala.com/internships india student ${currentYear}`, 
-        `site:linkedin.com/jobs/view/ student internship india OR entry-level ${currentYear}`
-      ];
-      const randomQuery = queries[Math.floor(Math.random() * queries.length)];
-      console.log("[CRON] Searching for real opportunities with query:", randomQuery);
-      
-      const searchRes = await google.search(randomQuery, { page: 0, safe: false, parse_ads: false });
-      const topResults = searchRes.results.slice(0, 8).map((r: any) => `- Title: ${r.title}\n  Description: ${r.description}\n  Link: ${r.url}`).join("\n\n");
-      
-      if (topResults) {
-        webContext = `\nREAL LIVE WEB SEARCH RESULTS:\nHere are real opportunities recently indexed on the web. You MUST prioritize extracting your 10 opportunities from these real results whenever possible so that the links and titles are 100% genuine and not hallucinated. Use the Exact Link provided in these results.\n\n${topResults}\n`;
-      }
-    } catch (err: any) {
-      console.warn("[CRON] Web search failed, falling back to pure generative.", err.message);
-    }
+    // 3. Web Context — googlethis removed (Vercel IPs are blocked by Google Search)
+    // The AI is prompted directly with date context to generate real known opportunities
+    const webContext = "";
 
     // 4. Prompt
     const prompt = `You are a quality-control data generator for a student opportunity platform in India.
 Today's date is ${todayStr}.
 ${exclusions}${webContext}
 
-Generate a JSON array of exactly 10 student opportunities. Since you are provided with REAL LIVE WEB SEARCH RESULTS, rely heavily on them to extract real world hackathons, internships, or events (especially from LinkedIn, Unstop, and Internshala).
+Generate a JSON array of exactly 10 diverse student opportunities based on your knowledge of real, well-known programs in India (hackathons on Unstop, internships on Internshala, events at IITs/NITs, etc.).
 
-If the search results do not have enough diversity, you may generate the remaining items to reach exactly 10. Make sure the output represents diverse categories (e.g., hackathons, internships, workshops).
+Make sure the output represents diverse categories (e.g., hackathons, internships, workshops, sports).
 
 DATE RULES (CRITICAL — strictly enforce):
 - "deadline" MUST be a future date STRICTLY AFTER ${todayStr}. Minimum deadline: at least 7 days from today.
 - "event_date" MUST also be on or after today (${todayStr}). Never use past dates.
 - Do NOT generate any opportunity whose event or deadline has already passed. Ensure dates match any data found in the real web search results.
-- If the search results mention a year in the past (e.g. 2023, 2024, 2025), DO NOT invent a future ${currentYear} deadline for it. You MUST set auto_approve to FALSE and state that it is an old event.
+- If an opportunity is from a previous year or has clearly already happened, DO NOT list it. Set auto_approve to FALSE and state it is an old event.
 
 QUALITY CHECK (mandatory for every item):
 - The 'external_link' rule is STRICT. You MUST ONLY provide real, valid, direct URLs to the registration or opportunity page. Ensure the link points to the true origin of the opportunity (like unstop.com, internshala.com, etc.). Provide an empty string "" if you do not have a valid exact URL. Do NOT hallucinate fake links and do NOT use a Google search format.
