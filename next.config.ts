@@ -1,11 +1,11 @@
 import type { NextConfig } from "next";
 
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'none';" },
+  { key: "Content-Security-Policy", value: "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self';" },
   { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
-  { key: "Referrer-Policy", value: "no-referrer" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
 ];
 
 const nextConfig: NextConfig = {
@@ -33,21 +33,6 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 86400, // cache optimized images for 24h
   },
-
-  // ── Webpack memory/performance tuning (dev only) ──────────────────────────
-  webpack: (config, { dev }) => {
-    if (dev) {
-      config.parallelism = 2;
-      config.watchOptions = {
-        ...config.watchOptions,
-        poll: false,
-        aggregateTimeout: 300,
-        ignored: ["**/node_modules/**", "**/.git/**", "**/.next/**", "**/.agent/**", "**/dist/**"],
-      };
-    }
-    return config;
-  },
-  turbopack: {},
 
   // ── Headers: security + aggressive caching of static assets ──────────────
   async headers() {
