@@ -29,7 +29,7 @@ export default function OpportunityCard({ opp, index = 0, locked = false }: { op
      setReporting(false);
   };
 
-  const meta    = CATEGORY_META[opp.category];
+  const meta    = CATEGORY_META[opp.category] ?? CATEGORY_META.hackathon;
   const days    = getDaysUntilDeadline(opp.deadline);
   const urgent  = days >= 0 && days <= 3;
   const expired = days < 0;

@@ -25,7 +25,7 @@ export default function OpportunityDetailClient({ id }: { id: string }) {
   
   if (!opp) return <div style={{color:"white", padding: 40}}>Loading or not found...</div>;
 
-  const meta    = CATEGORY_META[opp.category];
+  const meta    = CATEGORY_META[opp.category] ?? CATEGORY_META.hackathon;
   const days    = getDaysUntilDeadline(opp.deadline);
   const urgent  = days >= 0 && days <= 3;
   const expired = days < 0;
