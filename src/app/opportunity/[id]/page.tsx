@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import OpportunityDetailClient from "./OpportunityDetailClient";
 import { supabaseAdmin as supabase } from "@/lib/supabase-server";
 
-const SITE_URL = "https://opps-near-me.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://localopps.vercel.app";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -58,20 +58,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         description,
         siteName: "LocalOpps",
         locale: "en_IN",
-        images: [
-          {
-            url: `${SITE_URL}/og-image.png`,
-            width: 1200,
-            height: 630,
-            alt: title,
-          },
-        ],
       },
       twitter: {
         card: "summary_large_image",
         title,
         description,
-        images: [`${SITE_URL}/og-image.png`],
       },
       // Structured data is injected by the client component via a <script> tag
     };
